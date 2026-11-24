@@ -1,0 +1,101 @@
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+  background: #fdf6e3; font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  color: #fff;
+}
+canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; outline: none; touch-action: none; }
+.hidden { display: none !important; }
+.blue { color: #3a86ff; }
+.red { color: #ef233c; }
+
+/* ---------- HUD ---------- */
+#hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 0 2px 0 rgba(0,0,0,.35); }
+#score {
+  position: absolute; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  display: flex; gap: 14px; align-items: center; background: rgba(20,20,40,.45); border-radius: 999px;
+  padding: 6px 16px; font-weight: 800; font-size: 18px;
+}
+#score .team.blue b { color: #8ec5ff; } #score .team.red b { color: #ff8a95; }
+#score .team.blue { color: #8ec5ff; } #score .team.red { color: #ff8a95; }
+#score b { font-size: 24px; }
+#score .goal { font-size: 12px; opacity: .8; }
+#killfeed { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; font-size: 13px; }
+#killfeed div { background: rgba(20,20,40,.5); padding: 3px 8px; border-radius: 6px; animation: fadein .2s; }
+#killfeed .b { color: #8ec5ff; font-weight: 700; } #killfeed .r { color: #ff8a95; font-weight: 700; } #killfeed .me { color: #ffd23f; }
+@keyframes fadein { from { opacity: 0; transform: translateX(10px);} to { opacity: 1; transform: none; } }
+
+#crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --s: 8px; }
+#crosshair i { position: absolute; background: #fff; box-shadow: 0 0 2px #000; }
+#crosshair i:nth-child(1) { width: 2px; height: 8px; left: -1px; top: calc(-8px - var(--s)); }
+#crosshair i:nth-child(2) { width: 2px; height: 8px; left: -1px; top: var(--s); }
+#crosshair i:nth-child(3) { width: 8px; height: 2px; top: -1px; left: calc(-8px - var(--s)); }
+#crosshair i:nth-child(4) { width: 8px; height: 2px; top: -1px; left: var(--s); }
+#crosshair.on i { background: #ff4d6d; }
+#hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) scale(1.4); font-size: 26px; font-weight: 900; color: #fff; opacity: 0; transition: opacity .12s; }
+#hitmarker.show { opacity: 1; } #hitmarker.head { color: #ffd23f; }
+#banner { position: absolute; left: 50%; top: 32%; transform: translateX(-50%); font-size: 26px; font-weight: 900; color: #ffd23f; opacity: 0; transition: opacity .25s; white-space: nowrap; }
+#banner.show { opacity: 1; }
+#msg { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); font-size: 20px; font-weight: 700; text-align: center; white-space: pre-line; }
+
+#health { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: 16px; width: 220px; height: 22px; background: rgba(20,20,40,.5); border-radius: 12px; overflow: hidden; border: 2px solid rgba(255,255,255,.7); }
+#hpfill { height: 100%; width: 100%; background: linear-gradient(90deg, #38b000, #9ef01a); transition: width .15s; }
+#hpfill.low { background: linear-gradient(90deg, #ff7b00, #ffb700); }
+#hptext { position: absolute; inset: 0; text-align: center; font-weight: 800; font-size: 14px; line-height: 18px; }
+#weapon { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: 14px; text-align: right; font-weight: 800; }
+#wname { font-size: 16px; }
+#ammo { font-size: 30px; }
+#nades { font-size: 16px; color: #5ec8ff; margin-left: 8px; }
+#slots { display: flex; gap: 4px; justify-content: flex-end; margin-bottom: 4px; }
+#slots span { font-size: 11px; padding: 2px 6px; border-radius: 5px; background: rgba(20,20,40,.45); opacity: .7; }
+#slots span.cur { background: #ffd23f; color: #222; opacity: 1; text-shadow: none; outline: 2px solid #fff; }
+#dmg { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(255,140,0,.75) 100%); }
+
+/* ---------- Táctil ---------- */
+#touch { position: fixed; inset: 0; z-index: 5; }
+.stick { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; background: rgba(255,255,255,.18); border: 3px solid rgba(255,255,255,.55); display: none; pointer-events: none; }
+.stick.on { display: block; }
+.knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(255,255,255,.75); }
+.tlabel { position: absolute; bottom: 70px; font-size: 12px; font-weight: 800; opacity: .45; pointer-events: none; }
+#tlabelL { left: 18%; } #tlabelR { right: 28%; }
+.tbtn { position: absolute; width: 56px; height: 56px; border-radius: 50%; border: 3px solid rgba(255,255,255,.7); background: rgba(20,20,40,.35); color: #fff; font-weight: 900; font-size: 16px; padding: 0; touch-action: none; }
+.tbtn.big { width: 76px; height: 76px; font-size: 26px; }
+.tbtn:active, .tbtn.on { background: rgba(255,210,63,.6); }
+#bPause { top: 10px; left: max(12px, env(safe-area-inset-left)); width: 44px; height: 44px; font-size: 14px; }
+#bJump { right: max(18px, env(safe-area-inset-right)); bottom: 110px; }
+#bCrouch { right: max(104px, calc(env(safe-area-inset-right) + 86px)); bottom: 100px; }
+#bNade { right: max(22px, env(safe-area-inset-right)); bottom: 200px; color: #5ec8ff; font-size: 22px; }
+#bReload { right: max(92px, calc(env(safe-area-inset-right) + 74px)); bottom: 172px; font-size: 22px; }
+#bSwap { right: max(22px, env(safe-area-inset-right)); top: 64px; font-size: 12px; }
+body.touch #health { bottom: auto; top: 62px; left: max(12px, env(safe-area-inset-left)); width: 160px; }
+body.touch #weapon { bottom: auto; top: 10px; right: 84px; }
+body.touch #weapon #ammo { font-size: 22px; }
+body.touch #killfeed { top: 84px; right: 90px; }
+body.touch .pc-only { display: none; }
+body:not(.touch) .touch-only { display: none; }
+
+/* ---------- Menús ---------- */
+.overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: rgba(30,20,60,.35); padding: 12px; overflow-y: auto; }
+.panel { background: rgba(255,255,255,.95); color: #2b2d42; border-radius: 22px; padding: 18px 24px; max-width: 640px; width: 100%; text-align: center; box-shadow: 0 10px 0 rgba(0,0,0,.15); max-height: 100%; overflow-y: auto; }
+h1 { margin: 0; font-size: 44px; letter-spacing: 2px; color: #38b000; text-shadow: 3px 3px 0 #ffd23f; }
+h1 span { color: #3a86ff; }
+h2 { margin: 0 0 12px; font-size: 34px; color: #3a86ff; }
+.sub { margin: 2px 0 12px; font-weight: 700; color: #8d99ae; }
+.group { margin: 8px 0; }
+.label { font-weight: 800; margin-bottom: 6px; }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.choices button { border: 3px solid #dee2e6; background: #fff; border-radius: 14px; padding: 6px 12px; font-weight: 800; font-size: 15px; color: #2b2d42; cursor: pointer; min-width: 110px; }
+.choices button small { display: block; font-weight: 600; font-size: 11px; color: #8d99ae; }
+.choices button.sel { border-color: #3a86ff; background: #e7f0ff; }
+button.cta { display: block; margin: 14px auto 6px; border: none; border-radius: 16px; background: #ffd23f; color: #2b2d42; font-size: 26px; font-weight: 900; padding: 10px 40px; box-shadow: 0 5px 0 #e0a800; cursor: pointer; }
+button.cta:active { transform: translateY(3px); box-shadow: 0 2px 0 #e0a800; }
+button.small { display: block; margin: 8px auto 0; border: 2px solid #3a86ff; color: #3a86ff; background: #fff; border-radius: 12px; padding: 6px 16px; font-weight: 800; cursor: pointer; }
+.help { font-size: 13px; color: #555; margin: 6px 0; }
+#rotate { position: fixed; inset: 0; z-index: 20; background: #3a86ff; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 24px; font-weight: 800; }
+@media (orientation: portrait) { body.touch.playing #rotate.maybe { display: flex !important; } }
+@media (max-height: 480px) {
+  h1 { font-size: 30px; } .panel { padding: 10px 16px; } button.cta { font-size: 20px; padding: 6px 30px; margin: 8px auto 4px; }
+  .choices button { min-width: 90px; padding: 4px 8px; font-size: 13px; }
+  .group { margin: 4px 0; } .sub { margin-bottom: 4px; }
+}
