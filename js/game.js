@@ -24,6 +24,7 @@
   scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
   scene.fogStart = 120; scene.fogEnd = 320; scene.fogColor = ROOM_COLOR;
   scene.skipPointerMovePicking = true;
+  scene.detachControl(); // los controles son nuestros; Babylon no debe tocar los clics
 
   const camera = new BABYLON.FreeCamera('cam', new V3(-34, 2, 0), scene);
   camera.minZ = 0.05; camera.maxZ = 600; camera.fov = 1.15;
@@ -777,16 +778,24 @@
   });
   addEventListener('keyup', (e) => { keys[e.code] = false; });
   addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouseDown = false; aimDown = false; });
-  canvas.addEventListener('mousedown', (e) => {
-    if (state !== 'playing' || touchMode) return;
+  // Ratón: escuchamos pointer y mouse a la vez y leemos qué botones están apretados,
+  // así un clic perdido (o apretar los dos botones juntos) no deja el disparo trabado.
+  const syncButtons = (e) => { mouseDown = (e.buttons & 1) !== 0; aimDown = (e.buttons & 2) !== 0; };
+  const onDown = (e) => {
+    if (e.pointerType && e.pointerType !== 'mouse') return;
+    if (touchMode) disableTouch();
+    if (state !== 'playing') return;
     if (!locked && wantsLock) requestLock();
-    if (e.button === 0) mouseDown = true;
-    if (e.button === 2) aimDown = true;
-  });
-  addEventListener('mouseup', (e) => { if (e.button === 0) mouseDown = false; if (e.button === 2) aimDown = false; });
+    syncButtons(e);
+  };
+  const onUp = (e) => { if (!e.pointerType || e.pointerType === 'mouse') syncButtons(e); };
+  canvas.addEventListener('pointerdown', onDown);
+  canvas.addEventListener('mousedown', onDown);
+  addEventListener('pointerup', onUp);
+  addEventListener('mouseup', onUp);
   addEventListener('contextmenu', (e) => e.preventDefault());
-  addEventListener('mousemove', (e) => {
-    if (state !== 'playing' || touchMode) return;
+  addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse' || state !== 'playing' || touchMode) return;
     if ((locked || e.buttons) && Math.abs(e.movementX) < 250 && Math.abs(e.movementY) < 250) {
       const s = SENS * (aimDown && WEAPONS[P.wi].zoom ? 0.4 : aimDown ? 0.75 : 1);
       P.yaw += e.movementX * s; P.pitch = clamp(P.pitch + e.movementY * s, -1.45, 1.45);
@@ -815,8 +824,14 @@
     document.body.classList.add('touch');
     if (state === 'playing') touchLayer.classList.remove('hidden');
   }
+  function disableTouch() {
+    touchMode = false;
+    document.body.classList.remove('touch');
+    touchLayer.classList.add('hidden');
+    hud.cross.classList.remove('on');
+  }
   if (touchMode) enableTouch();
-  addEventListener('touchstart', () => { if (!touchMode) enableTouch(); }, { passive: true, once: true });
+  addEventListener('touchstart', () => { if (!touchMode) enableTouch(); }, { passive: true });
   touchLayer.addEventListener('touchstart', (e) => {
     if (e.target.classList.contains('tbtn')) return;
     e.preventDefault();
@@ -1154,7 +1169,7 @@
     soldiers.forEach((s) => respawn(s));
     P.wi = 0; P.crouchToggle = false; $('bCrouch').classList.remove('on');
     hud.feed.innerHTML = '';
-    gameTime = 0;
+    gameTime = 0; P.nextShot = 0; P.reloadT = 0;
     resume();
   }
   function resume() {
@@ -1245,5 +1260,5 @@
   });
 
   // Para pruebas automáticas
-  window.__pa = { scene, P, get bots() { return bots; }, score, get state() { return state; }, startMatch, firePlayer, playerNade };
+  window.__pa = { get dbg() { return { mouseDown, touchMode, locked, nextShot: P.nextShot, gameTime, reloadT: P.reloadT, alive: P.alive }; }, scene, P, get bots() { return bots; }, score, get state() { return state; }, startMatch, firePlayer, playerNade };
 })();
