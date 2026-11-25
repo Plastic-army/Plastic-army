@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Plastic Army</title>
+  <meta name="description" content="Plastic Army: soldaditos de juguete en un escritorio gigante. Prototipo jugable.">
+  <meta name="theme-color" content="#3a86ff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="score"><span class="team blue">AZUL <b id="sb">0</b></span><span class="goal">Meta: 30</span><span class="team red"><b id="sr">0</b> ROJO</span></div>
+    <div id="killfeed"></div>
+    <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+    <div id="hitmarker">✕</div>
+    <div id="banner"></div>
+    <div id="msg"></div>
+    <div id="health"><div id="hpfill"></div><span id="hptext">100</span></div>
+    <div id="weapon">
+      <div id="slots"></div>
+      <div id="wname">Rifle de bolitas</div>
+      <div><span id="ammo">30</span> <span id="nades"></span></div>
+    </div>
+    <div id="dmg"></div>
+  </div>
+
+  <!-- Controles táctiles -->
+  <div id="touch" class="hidden">
+    <div class="stick" id="stickL"><div class="knob"></div></div>
+    <div class="stick" id="stickR"><div class="knob"></div></div>
+    <div class="tlabel" id="tlabelL">MOVER</div>
+    <div class="tlabel" id="tlabelR">APUNTAR</div>
+    <button class="tbtn" id="bPause">II</button>
+    <button class="tbtn" id="bSwap">ARMA</button>
+    <button class="tbtn" id="bReload">↻</button>
+    <button class="tbtn" id="bNade">●</button>
+    <button class="tbtn" id="bCrouch">▼</button>
+    <button class="tbtn big" id="bJump">▲</button>
+  </div>
+
+  <!-- Menú principal -->
+  <div id="menu" class="overlay">
+    <div class="panel">
+      <h1>PLASTIC <span>ARMY</span></h1>
+      <p class="sub">Batalla en el Escritorio · prototipo</p>
+      <div class="group">
+        <div class="label">Elige tu clase</div>
+        <div class="choices" id="classChoices">
+          <button data-class="fusilero" class="sel">Fusilero<small>Equilibrado, recarga rápido</small></button>
+          <button data-class="escudero">Escudero<small>Más vida, más lento</small></button>
+          <button data-class="explorador">Explorador<small>Rápido, salta alto</small></button>
+          <button data-class="ingeniero">Ingeniero<small>Lleva 4 canicas</small></button>
+        </div>
+      </div>
+      <div class="group">
+        <div class="label">Dificultad</div>
+        <div class="choices" id="diffChoices">
+          <button data-diff="facil">Fácil<small>4 contra 3</small></button>
+          <button data-diff="normal" class="sel">Normal<small>4 contra 4</small></button>
+          <button data-diff="dificil">Difícil<small>4 contra 5</small></button>
+        </div>
+      </div>
+      <button id="play" class="cta">¡JUGAR!</button>
+      <p class="help pc-only">WASD moverse · Ratón apuntar · Clic disparar · Clic derecho mirilla · 1/2/3 o rueda cambiar arma · R recargar · G canica · Espacio saltar · Shift correr · C agacharse · Esc pausa</p>
+      <p class="help touch-only">Joystick izquierdo: moverte · Joystick derecho: apuntar. ¡Disparas solo cuando la mira toca a un enemigo!</p>
+      <p class="help">Eres del equipo <b class="blue">AZUL</b>. El primer equipo en llegar a <b>30</b> eliminaciones gana.</p>
+      <button id="install" class="small hidden">Instalar el juego</button>
+    </div>
+  </div>
+
+  <div id="pause" class="overlay hidden">
+    <div class="panel">
+      <h2>Pausa</h2>
+      <button id="resume" class="cta">Continuar</button>
+      <button id="quit" class="small">Volver al menú</button>
+    </div>
+  </div>
+
+  <div id="over" class="overlay hidden">
+    <div class="panel">
+      <h2 id="overTitle">¡VICTORIA!</h2>
+      <p id="overStats"></p>
+      <button id="again" class="cta">Jugar otra vez</button>
+      <button id="toMenu" class="small">Menú</button>
+    </div>
+  </div>
+
+  <div id="rotate" class="hidden"><div>📱↻<br>Gira el celular para jugar</div></div>
+
+  <script src="lib/babylon.js"></script>
+  <script src="js/game.js"></script>
+  <script>
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
