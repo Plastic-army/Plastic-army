@@ -783,6 +783,7 @@
   const syncButtons = (e) => { mouseDown = (e.buttons & 1) !== 0; aimDown = (e.buttons & 2) !== 0; };
   const onDown = (e) => {
     if (e.pointerType && e.pointerType !== 'mouse') return;
+    if (performance.now() - lastTouchT < 1500 || (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents)) return;
     if (touchMode) disableTouch();
     if (state !== 'playing') return;
     if (!locked && wantsLock) requestLock();
@@ -831,7 +832,8 @@
     hud.cross.classList.remove('on');
   }
   if (touchMode) enableTouch();
-  addEventListener('touchstart', () => { if (!touchMode) enableTouch(); }, { passive: true });
+  let lastTouchT = -1e9;
+  addEventListener('touchstart', () => { lastTouchT = performance.now(); if (!touchMode) enableTouch(); }, { passive: true, capture: true });
   touchLayer.addEventListener('touchstart', (e) => {
     if (e.target.classList.contains('tbtn')) return;
     e.preventDefault();
@@ -950,7 +952,18 @@
     if (keys.KeyS || keys.ArrowDown) mz -= 1;
     if (keys.KeyD || keys.ArrowRight) mx += 1;
     if (keys.KeyA || keys.ArrowLeft) mx -= 1;
-    if (touchMode) { mx += sticks.L.x; mz -= sticks.L.y; }
+    if (touchMode) {
+      mx += sticks.L.x; mz -= sticks.L.y;
+      // Joystick derecho: mientras lo mantienes inclinado la mira gira (más lejos del centro = más rápido)
+      const rx = sticks.R.x, ry = sticks.R.y;
+      if (rx || ry) {
+        const curve = (v) => Math.sign(v) * Math.pow(Math.abs(v), 1.7);
+        const slow = hud.cross.classList.contains('on') ? 0.45 : 1; // ayuda: más lento sobre un enemigo
+        const zoom = aimDown && WEAPONS[P.wi].zoom ? 0.4 : 1;
+        P.yaw += curve(rx) * 3.4 * slow * zoom * dt;
+        P.pitch = clamp(P.pitch + curve(ry) * 2.2 * slow * zoom * dt, -1.45, 1.45);
+      }
+    }
     const len = Math.hypot(mx, mz); if (len > 1) { mx /= len; mz /= len; }
     P.crouch = !!(keys.KeyC || P.crouchToggle);
     const wantH = P.crouch ? H_CROUCH : H;
