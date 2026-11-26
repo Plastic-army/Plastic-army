@@ -21,7 +21,7 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 10
 #score .team.blue { color: #8ec5ff; } #score .team.red { color: #ff8a95; }
 #score b { font-size: 24px; }
 #score .goal { font-size: 12px; opacity: .8; }
-#killfeed { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; font-size: 13px; }
+#killfeed { position: absolute; top: 64px; right: 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; font-size: 13px; }
 #killfeed div { background: rgba(20,20,40,.5); padding: 3px 8px; border-radius: 6px; animation: fadein .2s; }
 #killfeed .b { color: #8ec5ff; font-weight: 700; } #killfeed .r { color: #ff8a95; font-weight: 700; } #killfeed .me { color: #ffd23f; }
 @keyframes fadein { from { opacity: 0; transform: translateX(10px);} to { opacity: 1; transform: none; } }
@@ -99,3 +99,39 @@ button.small { display: block; margin: 8px auto 0; border: 2px solid #3a86ff; co
   .choices button { min-width: 90px; padding: 4px 8px; font-size: 13px; }
   .group { margin: 4px 0; } .sub { margin-bottom: 4px; }
 }
+
+/* ---------- Configuración ---------- */
+#gear {
+  position: fixed; z-index: 15; top: max(10px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));
+  width: 44px; height: 44px; border-radius: 50%; border: 3px solid rgba(255,255,255,.8); background: rgba(20,20,40,.45);
+  color: #fff; font-size: 26px; line-height: 1; padding: 0; cursor: pointer; touch-action: manipulation;
+}
+#gear:active { background: rgba(255,210,63,.7); }
+body.settings-open #gear, body.editing-layout #gear { display: none; }
+#settings { z-index: 16; }
+.stepper { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.stepper button { width: 44px; height: 44px; border-radius: 50%; border: 3px solid #3a86ff; background: #fff; color: #3a86ff; font-size: 26px; font-weight: 900; line-height: 1; padding: 0; cursor: pointer; }
+.stepper input { width: 180px; max-width: 40vw; accent-color: #3a86ff; touch-action: pan-x; }
+.stepper b { min-width: 42px; font-size: 20px; color: #2b2d42; }
+
+#bFire { right: max(190px, calc(env(safe-area-inset-right) + 170px)); bottom: 150px; width: 84px; height: 84px; font-size: 34px; border-color: #ff8a95; }
+body:not(.fire-manual) #bFire { display: none; }
+
+/* Modo para reacomodar botones */
+body.editing-layout .overlay { display: none !important; }
+body.editing-layout #hud { display: block !important; opacity: .5; }
+body.editing-layout #touch { display: block !important; z-index: 17; background: rgba(30,20,60,.3); }
+body.editing-layout #bFire { display: block; }
+body.editing-layout .tbtn { cursor: grab; outline: 3px dashed #ffd23f; outline-offset: 3px; animation: wiggle 1.2s ease-in-out infinite; }
+body.editing-layout .tbtn.dragging { animation: none; background: rgba(255,210,63,.7); cursor: grabbing; }
+body.editing-layout .tlabel { display: none; }
+@keyframes wiggle { 0%,100% { rotate: -4deg; } 50% { rotate: 4deg; } }
+#layoutBar {
+  position: fixed; z-index: 18; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 32px);
+  background: rgba(255,255,255,.95); color: #2b2d42; border-radius: 16px; padding: 8px 12px; font-weight: 800; box-shadow: 0 6px 0 rgba(0,0,0,.15);
+}
+#layoutBar button { border: 2px solid #3a86ff; color: #3a86ff; background: #fff; border-radius: 12px; padding: 6px 14px; font-weight: 800; font-size: 15px; cursor: pointer; }
+#layoutBar button.ok { background: #ffd23f; border-color: #e0a800; color: #2b2d42; }
+@media (max-height: 420px) { #bNade { bottom: 22px; } }
+@media (max-height: 480px) { #settings h2 { font-size: 22px; margin-bottom: 2px; } .stepper button { width: 38px; height: 38px; } }
