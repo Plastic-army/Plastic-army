@@ -1,7 +1,7 @@
 // Service worker: guarda el juego en el teléfono/PC para que abra rápido y funcione sin internet.
 // Primero intenta la red (para recibir siempre la versión nueva) y si no hay conexión usa la copia guardada.
-const CACHE = 'plastic-army-v10';
-const FILES = ['./', 'index.html', 'css/style.css', 'js/game.js', 'lib/babylon.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'img/modo-equipos.jpg', 'img/mapa-plaza.jpg', 'img/mapa-casa.jpg'];
+const CACHE = 'plastic-army-v11';
+const FILES = ['./', 'index.html', 'css/style.css', 'js/game.js', 'lib/babylon.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'img/modo-equipos.jpg', 'img/mapa-plaza.jpg', 'img/mapa-casa.jpg', 'img/mapa-barrio.jpg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));

@@ -14,12 +14,16 @@ Soldaditos de juguete peleando por equipos en un jardín gigante, o todos contra
 - Controles de PC (WASD + ratón) y de celular (dos joysticks, disparo automático al apuntar a un enemigo).
 - Instalable (PWA) y funciona sin internet después de abrirlo una vez.
 
-## Batalla campal (todos contra todos)
-- En **Inicio**, arriba de INICIAR, está **Elegir modo**: *Por equipos* (Jardín) o *Batalla campal*. Al tocar Batalla campal se abre **Elegir mapa** con la foto de cada mapa.
-- **Plaza**: al aire libre con pasto, fuente, juegos, arenero, glorieta y setos. 16 jugadores (tú + 15 bots). Caes desde el cielo en un lugar al azar.
-- **Casa**: casa grande de 2 pisos (cocina, living, comedor, cuarto de juegos y dormitorios arriba, con dos escaleras) y un patio con cerca. 12 jugadores.
-- Todos empiezan con la **pistolita de bolitas** en un lugar al azar. Hay armas (rifle, escopeta, lanzadardos) y bolsitas de canicas tiradas por el mapa: se agarran solas al pasar por encima. Si alguien cae, suelta su arma. Las armas del piso vuelven a aparecer en otro lugar 22 s después.
-- No se vuelve a aparecer: gana el último soldadito en pie.
+## Batalla campal (50 jugadores)
+- En **Inicio**, arriba de INICIAR, está **Elegir modo**: *Por equipos* (Jardín) o *Batalla campal*. Al tocar Batalla campal se abre **Elegir mapa**: eliges **Solo** o **Dúos** y uno de los tres mapas (con foto).
+- **Plaza** (grande): fuente, juegos, estanque con patitos, arenero, glorieta, cancha y setos.
+- **Casa**: casa grande de 2 pisos con dos escaleras y un patio enorme (garaje, invernadero, pileta, casita del árbol).
+- **Barrio**: casas a los costados (se puede entrar a todas), calles con autos y una plaza en el medio.
+- Todos caen del cielo en un lugar al azar con la **pistolita de bolitas**. Hay armas y canicas tiradas por el mapa que se agarran solas al pasar por encima; quien cae suelta su arma.
+- **Tormenta**: el lugar seguro es un círculo que se achica en 5 etapas. Afuera pierdes 1 de vida en cada golpe (los golpes son más seguidos al final). El círculo blanco marca adónde se va a cerrar.
+- **Mapa chico** abajo a la izquierda: muestra la tormenta, la próxima zona, a ti y a tu compañero.
+- **Dúos**: si te eliminan queda tu chapita; si tu compañero pasa por arriba, vuelves cayendo del cielo con 50 de vida (una sola vez). Mientras esperas, ves a tu compañero.
+- No se vuelve a aparecer de otra forma: gana el último soldadito (o dúo) en pie.
 
 ## Controles
 | PC | Celular |
