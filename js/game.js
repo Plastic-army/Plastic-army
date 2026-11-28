@@ -256,10 +256,7 @@
   }
   // Caja apoyada en "y" (la base queda en y)
   // Huellas de cosas apoyadas en el piso: ahí no crece el pasto 3D
-  let noGrass = [];
-  const onFloor = (y) => Math.abs(y) < 0.35 || Math.abs(y - GROUND_Y) < 0.35;
   function box(name, w, h, d, x, y, z, material, opt = {}) {
-    if (onFloor(y)) noGrass.push([x - w / 2 - 0.3, z - d / 2 - 0.3, x + w / 2 + 0.3, z + d / 2 + 0.3]);
     const m = BABYLON.MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene);
     m.position.set(x, y + h / 2, z);
     m.material = typeof material === 'string' ? plastic(material) : material;
@@ -267,7 +264,6 @@
     return finishStatic(m, opt.shadow !== false);
   }
   function cyl(name, diam, h, x, y, z, material, opt = {}) {
-    if (onFloor(y)) noGrass.push([x - diam / 2 - 0.3, z - diam / 2 - 0.3, x + diam / 2 + 0.3, z + diam / 2 + 0.3]);
     const m = BABYLON.MeshBuilder.CreateCylinder(name, { diameter: diam, height: h, tessellation: opt.tess || 28 }, scene);
     m.position.set(x, y + h / 2, z);
     m.material = typeof material === 'string' ? plastic(material) : material;
@@ -574,7 +570,6 @@
     for (let t = 0; t < TEAMS; t++) buildBase(t, wood);
 
     mergeStatics();
-    buildGrass(MAPS.jardin, GROUND_Y, [-150, -150, 150, 150], Math.round(grassCount() * 0.7));
     statics.forEach((m) => m.freezeWorldMatrix());
   }
 
@@ -650,11 +645,9 @@
     const m = MAPS[id];
     if (!m.built) {
       colliders = m.colliders; colGrid = null; statics.length = 0;
-      noGrass = [];
       ({ plaza: buildPlaza, casa: buildCasa, barrio: buildBarrio })[id]();
       mergeStatics();
-      const bd = m.bounds;
-      buildGrass(m, 0, [bd[0], bd[1], bd[2], bd[3]], grassCount(), id === 'plaza' ? [[0, 0, 18.5]] : []);
+
       statics.forEach((s) => s.freezeWorldMatrix());
       m.meshes = statics.slice(); statics.length = 0;
       m.grid = colGrid = buildColGrid(m.colliders);
@@ -664,7 +657,6 @@
     for (const k in MAPS) if (MAPS[k] !== m) MAPS[k].meshes.forEach((s) => s.setEnabled(false));
     m.meshes.forEach((s) => s.setEnabled(true));
     colliders = m.colliders; colGrid = m.grid; curMap = m;
-    refreshGrass();
     scene.fogStart = m.fog ? m.fog[0] : 220; scene.fogEnd = m.fog ? m.fog[1] : 600;
   }
 
@@ -1317,204 +1309,6 @@
   }
 
   // ------------------------------------------------------------------
-  // Física de prueba: el soldadito cae entero como un juguete de plástico (se vuelca, rebota y patina),
-  // se inclina al correr, el pasto se mueve con el viento y se aparta al pasar, y las bolitas rebotan.
-  // ------------------------------------------------------------------
-  const physOn = () => cfg.phys !== false;
-  const tmpQ = new BABYLON.Quaternion(), tmpQ2 = new BABYLON.Quaternion();
-  function startTopple(s, attacker, how) {
-    if (!s.mesh) return;
-    let dx = rand(-1, 1), dz = rand(-1, 1);
-    if (attacker && attacker !== s) { dx = s.pos.x - attacker.pos.x; dz = s.pos.z - attacker.pos.z; }
-    const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
-    const blast = how === 'nade' || how === 'mega';
-    s.tp = {
-      dx, dz, th: 0.05, w: blast ? rand(5, 7) : rand(2.2, 3.4),
-      vx: dx * (blast ? rand(4, 7) : rand(1, 2.2)), vz: dz * (blast ? rand(4, 7) : rand(1, 2.2)), vy: blast ? rand(5, 8) : rand(1.2, 2.4),
-      y: 0, spin: rand(-2.5, 2.5), yaw: s.yaw || 0, bx: s.pos.x, by: s.pos.y, bz: s.pos.z, rest: false
-    };
-    s.mesh.rotation.set(0, 0, 0);
-  }
-  function updateTopple(s, dt) {
-    const t = s.tp, m = s.mesh;
-    if (!t || !m) return;
-    if (!t.rest) {
-      if (t.y > 0) t.th += t.w * dt; // en el aire gira libre
-      else { t.w += Math.sin(t.th) * 10 * dt; t.th += t.w * dt; } // apoyado: se vuelca sobre el borde de la base
-      if (t.th >= Math.PI / 2) { t.th = Math.PI / 2; t.w = -Math.abs(t.w) * 0.32; if (Math.abs(t.w) < 0.7) t.w = 0; if (t.y === 0 && t.w) sfx('clink', 0.25); }
-      if (t.th < 0) { t.th = 0; t.w = Math.abs(t.w) * 0.3 + 0.5; }
-      t.vy -= GRAV * dt; t.y += t.vy * dt;
-      if (t.y <= 0) { t.y = 0; t.vy = Math.abs(t.vy) > 1.5 ? -t.vy * 0.3 : 0; }
-      const fr = t.y > 0 ? 0.15 : 4;
-      t.vx -= t.vx * Math.min(1, fr * dt); t.vz -= t.vz * Math.min(1, fr * dt);
-      t.yaw += t.spin * dt; t.spin *= Math.max(0, 1 - 2.5 * dt);
-      const mx = t.vx * dt, mz = t.vz * dt;
-      if (mx || mz) {
-        const from = new V3(t.bx, t.by + t.y + 0.4, t.bz);
-        if (segWorld(from, new V3(mx * 4, 0, mz * 4)) >= 1) { t.bx += mx; t.bz += mz; } else { t.vx = -t.vx * 0.3; t.vz = -t.vz * 0.3; }
-      }
-      if (t.th >= Math.PI / 2 && t.w === 0 && t.y === 0 && t.vy === 0 && Math.hypot(t.vx, t.vz) < 0.08) t.rest = true;
-    }
-    // Rotación: primero mira hacia donde miraba (yaw) y después se vuelca hacia la dirección del golpe
-    BABYLON.Quaternion.RotationYawPitchRollToRef(t.yaw, 0, 0, tmpQ);
-    BABYLON.Quaternion.RotationAxisToRef(new V3(t.dz, 0, -t.dx), t.th, tmpQ2);
-    if (!m.rotationQuaternion) m.rotationQuaternion = new BABYLON.Quaternion();
-    tmpQ2.multiplyToRef(tmpQ, m.rotationQuaternion);
-    m.position.set(t.bx, t.by + t.y, t.bz);
-  }
-  function endTopple(s) { s.tp = null; if (s.mesh) { s.mesh.rotationQuaternion = null; s.mesh.rotation.set(0, s.yaw || 0, 0); } }
-  // Inclinación al correr y pasito de juguete (bamboleo)
-  function leanSoldier(s, dt) {
-    const m = s.mesh; if (!m) return;
-    if (!physOn()) { m.rotation.x = m.rotation.z = 0; return; }
-    const fx = Math.sin(s.yaw), fz = Math.cos(s.yaw);
-    const fwd = s.vel.x * fx + s.vel.z * fz, side = s.vel.x * fz - s.vel.z * fx, sp = Math.hypot(s.vel.x, s.vel.z);
-    const k = Math.min(1, 8 * dt);
-    s.leanX = (s.leanX || 0) + (clamp(fwd * 0.018, -0.12, 0.12) - (s.leanX || 0)) * k;
-    s.leanZ = (s.leanZ || 0) + (clamp(-side * 0.02, -0.12, 0.12) - (s.leanZ || 0)) * k;
-    s.walkT = (s.walkT || 0) + dt * sp * 1.9;
-    const wob = s.onGround && sp > 0.8 ? Math.sin(s.walkT) * 0.05 : 0;
-    m.rotation.x = s.leanX; m.rotation.z = s.leanZ + wob;
-    if (wob) m.position.y += Math.abs(Math.cos(s.walkT)) * 0.06;
-  }
-
-  // --- Pasto 3D: matas de hojitas que se mueven con el viento y se agachan cuando pasa un soldadito ---
-  const grassPush = [new BABYLON.Vector4(0, -999, 0, 1), new BABYLON.Vector4(0, -999, 0, 1), new BABYLON.Vector4(0, -999, 0, 1), new BABYLON.Vector4(0, -999, 0, 1)];
-  let grassTime = 0, grassBladeMat = null;
-  class GrassWind extends BABYLON.MaterialPluginBase {
-    constructor(material) { super(material, 'GrassWind', 200, { GRASSWIND: false }); this._enable(true); }
-    prepareDefines(defines) { defines.GRASSWIND = true; }
-    getClassName() { return 'GrassWind'; }
-    getUniforms() {
-      return {
-        ubo: [{ name: 'gwTime', size: 1, type: 'float' }, { name: 'gwP0', size: 4, type: 'vec4' }, { name: 'gwP1', size: 4, type: 'vec4' }, { name: 'gwP2', size: 4, type: 'vec4' }, { name: 'gwP3', size: 4, type: 'vec4' }],
-        vertex: 'uniform float gwTime; uniform vec4 gwP0; uniform vec4 gwP1; uniform vec4 gwP2; uniform vec4 gwP3;'
-      };
-    }
-    bindForSubMesh(ubo) {
-      ubo.updateFloat('gwTime', grassTime);
-      ubo.updateVector4('gwP0', grassPush[0]); ubo.updateVector4('gwP1', grassPush[1]); ubo.updateVector4('gwP2', grassPush[2]); ubo.updateVector4('gwP3', grassPush[3]);
-    }
-    getCustomCode(type) {
-      if (type === 'vertex') return {
-        CUSTOM_VERTEX_DEFINITIONS: 'varying float gwH;',
-        CUSTOM_VERTEX_UPDATE_WORLDPOS: `
-          float gh = clamp(position.y, 0.0, 1.0); gwH = gh;
-          float bend = gh * gh;
-          vec2 wind = vec2(sin(gwTime * 1.7 + worldPos.x * 0.35 + worldPos.z * 0.21) + 0.35 * sin(gwTime * 3.3 + worldPos.z * 0.9),
-                           0.6 * cos(gwTime * 1.3 + worldPos.x * 0.27 - worldPos.z * 0.31));
-          worldPos.xz += wind * bend * 0.16;
-          vec4 gp[4]; gp[0] = gwP0; gp[1] = gwP1; gp[2] = gwP2; gp[3] = gwP3;
-          for (int i = 0; i < 4; i++) {
-            vec2 d = worldPos.xz - gp[i].xz; float dist = length(d);
-            float f = (1.0 - smoothstep(0.0, gp[i].w, dist)) * step(abs(worldPos.y - gp[i].y), 2.5);
-            worldPos.xz += normalize(d + vec2(0.0001)) * f * bend * 0.75;
-            worldPos.y -= f * bend * 0.45;
-          }
-          vPositionW = vec3(worldPos);`
-      };
-      if (type === 'fragment') return {
-        CUSTOM_FRAGMENT_DEFINITIONS: 'varying float gwH;',
-        CUSTOM_FRAGMENT_UPDATE_DIFFUSE: 'baseColor.rgb *= mix(0.45, 1.15, gwH);'
-      };
-      return null;
-    }
-  }
-  function grassTuftGeometry() {
-    const pos = [], nrm = [], idx = [];
-    for (let b = 0; b < 6; b++) {
-      const a = rand(0, Math.PI * 2), r = rand(0, 0.2), ox = Math.cos(a) * r, oz = Math.sin(a) * r;
-      const face = rand(0, Math.PI), cx = Math.cos(face), cz = Math.sin(face); // orientación de la hojita
-      const lean = rand(0.15, 0.45), la = rand(0, Math.PI * 2), lx = Math.cos(la) * lean, lz = Math.sin(la) * lean;
-      const hgt = rand(0.65, 1), w = rand(0.06, 0.09), base = pos.length / 3;
-      const lv = [0, 0.35, 0.7, 1];
-      lv.forEach((t, i) => {
-        const y = t * hgt, bx = ox + lx * t * t, bz = oz + lz * t * t, hw = w * (1 - t * 0.85);
-        if (i < 3) { pos.push(bx - cx * hw, y, bz - cz * hw, bx + cx * hw, y, bz + cz * hw); for (let k = 0; k < 2; k++) nrm.push(-cz * 0.8, 0.6, cx * 0.8); }
-        else { pos.push(bx, y, bz); nrm.push(-cz * 0.8, 0.6, cx * 0.8); }
-      });
-      for (let i = 0; i < 2; i++) { const q = base + i * 2; idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
-      idx.push(base + 4, base + 5, base + 6);
-    }
-    const vd = new BABYLON.VertexData(); vd.positions = pos; vd.normals = nrm; vd.indices = idx;
-    return vd;
-  }
-  function buildGrass(map, y, rect, count, circles = []) {
-    if (!grassBladeMat) {
-      grassBladeMat = new BABYLON.StandardMaterial('grassBlade', scene);
-      grassBladeMat.diffuseColor = C3.White(); grassBladeMat.specularColor = new C3(0.05, 0.08, 0.03);
-      grassBladeMat.backFaceCulling = false; grassBladeMat.twoSidedLighting = true;
-      new GrassWind(grassBladeMat);
-    }
-    const mesh = new BABYLON.Mesh('grass3d', scene);
-    grassTuftGeometry().applyToMesh(mesh);
-    mesh.material = grassBladeMat; mesh.receiveShadows = true; mesh.isPickable = false;
-    const blocked = (x, z) => noGrass.some((r) => x > r[0] && x < r[2] && z > r[1] && z < r[3]) || circles.some(([cx, cz, cr]) => Math.hypot(x - cx, z - cz) < cr);
-    const mats = [], cols = [], greens = [[0.36, 0.72, 0.25], [0.42, 0.78, 0.3], [0.3, 0.64, 0.22], [0.5, 0.8, 0.28], [0.56, 0.76, 0.24]];
-    let tries = 0;
-    while (mats.length / 16 < count && tries++ < count * 4) {
-      const cx = rand(rect[0], rect[2]), cz = rand(rect[1], rect[3]);
-      if (blocked(cx, cz)) continue;
-      const n = 3 + ((Math.random() * 5) | 0), g = pick(greens);
-      for (let k = 0; k < n && mats.length / 16 < count; k++) { // matas en grupitos, como el pasto de verdad
-        const x = cx + rand(-1.4, 1.4), z = cz + rand(-1.4, 1.4);
-        if (blocked(x, z)) continue;
-        const sc = rand(0.55, 1.15);
-        BABYLON.Matrix.ComposeToRef(new V3(sc * rand(0.8, 1.2), sc, sc * rand(0.8, 1.2)), BABYLON.Quaternion.RotationYawPitchRoll(rand(0, 6.28), 0, 0), new V3(x, y, z), tmpM);
-        tmpM.copyToArray(mats, mats.length);
-        const v = rand(0.88, 1.1); cols.push(g[0] * v, g[1] * v, g[2] * v, 1);
-      }
-    }
-    mesh.thinInstanceSetBuffer('matrix', new Float32Array(mats), 16, true);
-    mesh.thinInstanceSetBuffer('color', new Float32Array(cols), 4, true);
-    mesh.alwaysSelectAsActiveMesh = true;
-    mesh.freezeWorldMatrix();
-    map.grass = mesh;
-    mesh.setEnabled(grassWanted() && curMap === map);
-    return mesh;
-  }
-  const tmpM = new BABYLON.Matrix();
-  const grassWanted = () => physOn() && gfxLevel !== 'low';
-  function grassCount() { return gfxLevel === 'high' ? 9000 : touchMode ? 2500 : 5000; }
-  function updateGrass(dt) {
-    grassTime += dt;
-    // los que empujan el pasto: vos y los 3 soldaditos vivos más cerca de la cámara
-    const c = camera.position;
-    const near = soldiers.filter((s) => s.alive && s !== P).map((s) => [s, (s.pos.x - c.x) ** 2 + (s.pos.z - c.z) ** 2]).sort((a, b) => a[1] - b[1]);
-    const list = [P.alive ? P : null, ...near.slice(0, 3).map((a) => a[0])];
-    for (let i = 0; i < 4; i++) { const s = list[i]; if (s && s.alive) grassPush[i].set(s.pos.x, s.pos.y, s.pos.z, 1.3); else grassPush[i].set(0, -999, 0, 1); }
-  }
-  function refreshGrass() { for (const k in MAPS) if (MAPS[k].grass) MAPS[k].grass.setEnabled(grassWanted() && curMap === MAPS[k]); }
-
-  // --- Bolitas y corchos que rebotan en el piso; los dardos quedan clavados un rato ---
-  const debris = [];
-  function addDebris(key, pos, vel, stick) {
-    if (!physOn() || debris.length > 45) return false;
-    if (V3.DistanceSquared(pos, camera.position) > 45 * 45) return false;
-    const m = takeMesh(key); m.position.copyFrom(pos);
-    debris.push({ key, m, pos: pos.clone(), vel: stick ? V3.Zero() : new V3(-vel.x * 0.18 + rand(-1, 1), Math.abs(vel.y) * 0.1 + rand(2, 4), -vel.z * 0.18 + rand(-1, 1)), life: stick ? 3 : rand(1.4, 2.2), stick });
-    return true;
-  }
-  function updateDebris(dt) {
-    for (let i = debris.length - 1; i >= 0; i--) {
-      const d = debris[i];
-      d.life -= dt;
-      if (d.life <= 0) { giveMesh(d.key, d.m); debris.splice(i, 1); continue; }
-      if (d.stick) continue;
-      d.vel.y -= GRAV * 0.8 * dt;
-      const step = d.vel.scale(dt), t = segWorld(d.pos, step);
-      if (t < 1) { // choca: rebota perdiendo fuerza
-        d.pos.addInPlace(step.scale(Math.max(0, t - 0.05)));
-        if (d.vel.y < 0 && Math.abs(d.vel.y) > Math.hypot(d.vel.x, d.vel.z) * 0.5) { d.vel.y = -d.vel.y * 0.45; d.vel.x *= 0.7; d.vel.z *= 0.7; }
-        else { d.vel.x = -d.vel.x * 0.4; d.vel.z = -d.vel.z * 0.4; }
-      } else d.pos.addInPlace(step);
-      if (d.pos.y < -40) d.life = 0;
-      d.m.position.copyFrom(d.pos);
-      if (d.key === 'cork') { d.m.rotation.x += dt * 9; d.m.rotation.z += dt * 5; }
-    }
-  }
-
-  // ------------------------------------------------------------------
   // Efectos: confeti, polvito, destellos
   // ------------------------------------------------------------------
   const squareTex = textTexture(16, 16, (c) => { c.fillStyle = '#fff'; c.fillRect(0, 0, 16, 16); });
@@ -1800,7 +1594,6 @@
     s.pos.copyFrom(spawnPoint(s.team)); s.vel.setAll(0);
     s.alive = true; s.hp = s.maxHp; s.spawnProt = mode === 'ffa' ? 3 : 1.5; s.yaw = Math.atan2(-s.pos.x, -s.pos.z); s.pitch = 0;
     s.reloadT = 0; s.h = H; s.item = null; s.shieldT = 0; setShield(s, false);
-    endTopple(s);
     if (s === P) {
       P.weapons.forEach((w) => (w.ammo = w.def.mag)); P.nades = mode === 'ffa' ? 0 : P.cls.nades; P.crouch = false;
       showMsg(''); updateHud(true);
@@ -1916,7 +1709,7 @@
           let dmg = p.dmg * (head ? 1.6 : 1);
           if (p.def.id === 'shotgun') { const dist = V3.Distance(new V3(hx, hy, hz), p.owner.pos); dmg *= clamp(1.25 - dist / 22, 0.3, 1); }
           damage(hitS, dmg, p.owner, head, p.def.id);
-        } else { puff(hx, hy, hz); addDebris(p.key, new V3(hx, hy, hz).subtractInPlace(tmpD.normalizeToNew().scale(p.def.proj === 'dart' ? 0.2 : 0.08)), p.vel, p.def.proj === 'dart'); }
+        } else puff(hx, hy, hz);
         giveMesh(p.key, p.mesh); projectiles.splice(i, 1);
         continue;
       }
@@ -2364,7 +2157,6 @@
   }
   function kill(t, attacker, how, head) {
     t.alive = false; t.hp = 0; t.deaths++;
-    if (physOn() && how !== 'fall' && how !== 'storm') startTopple(t, attacker, how); else t.tp = null;
     confetti(chestOf(t), 1);
     if (attacker && attacker.team !== t.team) { if (mode === 'teams') score[attacker.team]++; attacker.kills++; }
     addFeed(attacker, t, how, head);
@@ -2952,12 +2744,9 @@
   function updateBot(b, dt) {
     if (!b.alive) {
       b.deathT += dt;
-      if (b.tp) { updateTopple(b, dt); if (b.deathT > 3.2) b.mesh.setEnabled(false); }
-      else {
-        const k = Math.min(1, b.deathT / 0.35);
-        b.mesh.rotation.x = -k * Math.PI / 2;
-        if (b.deathT > 1.6) b.mesh.setEnabled(false);
-      }
+      const k = Math.min(1, b.deathT / 0.35);
+      b.mesh.rotation.x = -k * Math.PI / 2;
+      if (b.deathT > 1.6) b.mesh.setEnabled(false);
       b.respawnT -= dt;
       if (b.respawnT <= 0) respawn(b);
       return;
@@ -3080,7 +2869,6 @@
     b.pitch += (desiredPitch - b.pitch) * Math.min(1, 8 * dt);
     b.mesh.position.copyFrom(b.pos);
     b.mesh.rotation.y = b.yaw;
-    leanSoldier(b, dt);
     setSoldierGun(b, b.wdef.id);
   }
   function botFire(b, t) {
@@ -3165,14 +2953,10 @@
     camera.rotation.set(P.pitch, P.yaw, P.alive || thirdPerson() ? 0 : 0.5);
     const def0 = curDef();
     if (P.mesh) {
-      P.mesh.setEnabled(thirdPerson() && (P.alive || P.deathT > 1.4 || !!P.tp));
+      P.mesh.setEnabled(thirdPerson() && (P.alive || P.deathT > 1.4));
       setSoldierGun(P, def0.id);
-      if (!P.alive && P.tp) updateTopple(P, dt);
-      else {
-        P.mesh.position.copyFrom(P.pos);
-        P.mesh.rotation.set(P.alive ? 0 : -Math.min(1, (3 - P.deathT) / 0.35) * Math.PI / 2, P.yaw, 0);
-        if (P.alive) leanSoldier(P, dt);
-      }
+      P.mesh.position.copyFrom(P.pos);
+      P.mesh.rotation.set(P.alive ? 0 : -Math.min(1, (3 - P.deathT) / 0.35) * Math.PI / 2, P.yaw, 0);
       P.mesh.scaling.y = P.h / H;
     }
     const def = curDef();
@@ -3349,7 +3133,6 @@
     $('sensRange').value = cfg.sens;
     [...$('camChoices').children].forEach((b) => b.classList.toggle('sel', b.dataset.cam === cfg.cam));
     [...$('gfxChoices').children].forEach((b) => b.classList.toggle('sel', b.dataset.gfx === gfxLevel));
-    [...$('physChoices').children].forEach((b) => b.classList.toggle('sel', (b.dataset.phys === 'on') === physOn()));
     [...$('fireChoices').children].forEach((b) => b.classList.toggle('sel', b.dataset.fire === cfg.fire));
     document.body.classList.toggle('fire-manual', cfg.fire === 'manual');
     if (cfg.fire !== 'manual') { touchFire = false; $('bFire').classList.remove('on'); }
@@ -3360,8 +3143,7 @@
   $('sensPlus').addEventListener('click', () => setSens(cfg.sens + 0.1));
   $('sensRange').addEventListener('input', (e) => setSens(+e.target.value));
   choose($('camChoices'), 'cam', (v) => { cfg.cam = v; applySettings(); saveCfg(); });
-  choose($('gfxChoices'), 'gfx', (v) => { cfg.gfx = v; applyGraphics(v); refreshGrass(); applySettings(); saveCfg(); });
-  choose($('physChoices'), 'phys', (v) => { cfg.phys = v === 'on'; refreshGrass(); applySettings(); saveCfg(); });
+  choose($('gfxChoices'), 'gfx', (v) => { cfg.gfx = v; applyGraphics(v); applySettings(); saveCfg(); });
   choose($('fireChoices'), 'fire', (v) => { cfg.fire = v; applySettings(); saveCfg(); });
   function openSettings() {
     settingsFromPlay = state === 'playing';
@@ -3465,8 +3247,6 @@
     updateCamera(dt);
     drawMinimap(dt);
     updateShadowFollow();
-    if (grassWanted()) updateGrass(dt);
-    if (state === 'playing' || state === 'over') updateDebris(dt);
     scene.render();
     if (++framesDrawn === 3 && window.__paReady) window.__paReady(); // avisa a la pantalla de carga
   });
@@ -3474,5 +3254,5 @@
   // Para pruebas automáticas
   window.__pa = { get dbg() { return { mouseDown, touchMode, locked, nextShot: P.nextShot, gameTime, reloadT: P.reloadT, alive: P.alive }; }, scene, P, get bots() { return bots; }, score, get state() { return state; }, startMatch, firePlayer, playerNade, findRoute, walkable, givePower, playerItem,
     simulate(sec) { for (let t = 0; t < sec && state === 'playing'; t += 1 / 30) { gameTime += 1 / 30; for (const b of bots) updateBot(b, 1 / 30); updateProjectiles(1 / 30); updateGrenades(1 / 30); if (mode === 'teams') updateBoxes(1 / 30); else { updatePickups(1 / 30); updateTags(1 / 30); updateStorm(1 / 30); } updateShields(1 / 30); } }, get boxes() { return boxes; }, get boxDrops() { return boxDrops; },
-    kill, pauseGame, setSoldierGun, setMap, MAPS, camera, photo(p, t, fov) { photoCam = p ? { p: new V3(...p), t: new V3(...t), fov } : null; }, get pickups() { return pickups; }, get mode() { return mode; }, cfg, get soldiers() { return soldiers; }, storm, get tags() { return tags; } };
+    setMap, MAPS, camera, photo(p, t, fov) { photoCam = p ? { p: new V3(...p), t: new V3(...t), fov } : null; }, get pickups() { return pickups; }, get mode() { return mode; }, cfg, get soldiers() { return soldiers; }, storm, get tags() { return tags; } };
 })();
