@@ -13,8 +13,50 @@
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Presentación y carga: va dentro del HTML para que se vea al instante, antes que nada */
+    #splash { position: fixed; inset: 0; z-index: 100; background: #0b0b10; color: #fff; font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; transition: opacity .5s; overflow: hidden; }
+    #splash.out { opacity: 0; pointer-events: none; }
+    #splash .stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vh; transition: opacity .45s; }
+    #splash .stage.off { opacity: 0; pointer-events: none; }
+    #studio svg { width: min(46vw, 46vh, 300px); height: auto; animation: gunIn .7s cubic-bezier(.2,1.4,.4,1) both; filter: drop-shadow(0 8px 24px rgba(230,30,40,.35)); }
+    #studio .name { font-weight: 900; font-size: min(11vw, 9vh, 64px); letter-spacing: .35em; margin-left: .35em; text-transform: uppercase; animation: nameIn .6s .45s ease-out both; }
+    @keyframes gunIn { from { opacity: 0; transform: scale(.6) rotate(-14deg); } to { opacity: 1; transform: none; } }
+    @keyframes nameIn { from { opacity: 0; letter-spacing: .9em; } to { opacity: 1; } }
+    #loading { background: radial-gradient(ellipse at 50% 35%, #7cc6ff 0%, #3a86ff 55%, #2457b8 100%); }
+    #loading .logo { font-weight: 900; font-size: min(12vw, 13vh, 76px); letter-spacing: 2px; color: #38b000; text-shadow: 4px 4px 0 #ffd23f, 0 8px 18px rgba(0,0,0,.25); text-align: center; line-height: 1; }
+    #loading .logo span { color: #fff; }
+    #loading .bar { width: min(70vw, 460px); height: 22px; border-radius: 999px; background: rgba(20,20,40,.35); border: 3px solid #fff; overflow: hidden; margin-top: 3vh; }
+    #loading .fill { height: 100%; width: 0%; background: linear-gradient(90deg, #ffd23f, #ffe98a); border-radius: 999px; transition: width .25s; }
+    #loading .pct { font-weight: 900; font-size: 18px; text-shadow: 0 2px 0 rgba(0,0,0,.25); }
+    #loading .tip { position: absolute; bottom: max(18px, env(safe-area-inset-bottom)); left: 16px; right: 16px; text-align: center; font-weight: 700; font-size: 15px; opacity: .9; }
+  </style>
 </head>
 <body>
+  <!-- Presentación del estudio y pantalla de carga -->
+  <div id="splash">
+    <div class="stage" id="studio">
+      <svg viewBox="0 0 200 140" aria-hidden="true">
+        <g stroke="#3a0508" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+          <path d="M18 26 H170 Q180 26 180 36 V56 Q180 62 174 62 H18 Q10 62 10 54 V34 Q10 26 18 26 Z" fill="#e5232f"/>
+          <path d="M80 62 Q78 94 104 94 Q122 94 124 74" fill="none" stroke-width="13"/>
+          <path d="M80 62 Q78 94 104 94 Q122 94 124 74" fill="none" stroke="#e5232f" stroke-width="5"/>
+          <path d="M100 64 Q103 78 94 84" fill="none" stroke="#ff7a83"/>
+          <path d="M118 62 H164 L176 124 Q178 134 168 134 H140 Q132 134 130 126 Z" fill="#c81822"/>
+        </g>
+        <rect x="24" y="32" width="120" height="7" rx="3.5" fill="#ff7a83"/>
+        <rect x="138" y="80" width="26" height="5" rx="2.5" fill="#e5232f" transform="rotate(78 151 82)"/>
+        <circle cx="166" cy="44" r="5" fill="#3a0508"/>
+      </svg>
+      <div class="name">dybau</div>
+    </div>
+    <div class="stage off" id="loading">
+      <div class="logo">PLASTIC<br><span>ARMY</span></div>
+      <div class="bar"><div class="fill" id="loadFill"></div></div>
+      <div class="pct" id="loadPct">0%</div>
+      <div class="tip" id="loadTip">Armando el jardín…</div>
+    </div>
+  </div>
   <canvas id="game"></canvas>
 
   <!-- HUD -->
@@ -163,8 +205,44 @@
 
   <div id="rotate" class="hidden"><div>📱↻<br>Gira el celular para jugar</div></div>
 
-  <script src="lib/babylon.js"></script>
-  <script src="js/game.js"></script>
+  <script>
+    // Carga: primero la presentación (pistola + dybau), después la barra mientras baja el motor 3D (lo más pesado).
+    (function () {
+      var splash = document.getElementById('splash'), studio = document.getElementById('studio'), loading = document.getElementById('loading');
+      var fill = document.getElementById('loadFill'), pct = document.getElementById('loadPct'), tip = document.getElementById('loadTip');
+      var TIPS = ['Armando el jardín…', 'Pintando a los soldaditos…', 'Llenando las cajas sorpresa…', 'Poniendo los puentes…'];
+      var shown = 0, target = 0, ready = false, studioDone = false, loadingSince = 0, done = false;
+      function set(p) { target = Math.max(target, Math.min(100, p)); }
+      // la barra avanza suave hacia el valor real
+      (function tick() {
+        if (done) return;
+        shown += (target - shown) * 0.15;
+        if (target - shown < 0.3) shown = target;
+        fill.style.width = shown.toFixed(1) + '%'; pct.textContent = Math.floor(shown) + '%';
+        tip.textContent = TIPS[Math.min(TIPS.length - 1, Math.floor(shown / 26))];
+        if (ready && studioDone && shown >= 99.9 && performance.now() - loadingSince > 600) {
+          done = true; splash.classList.add('out'); setTimeout(function () { splash.remove(); }, 600); return;
+        }
+        requestAnimationFrame(tick);
+      })();
+      setTimeout(function () { studio.classList.add('off'); loading.classList.remove('off'); studioDone = true; loadingSince = performance.now(); }, 2300);
+      window.__paReady = function () { ready = true; set(100); };
+      function addScript(src, cb) { var s = document.createElement('script'); s.src = src; s.onload = cb; s.onerror = cb; document.body.appendChild(s); }
+      function loadGame() { set(88); addScript('js/game.js', function () { set(95); setTimeout(window.__paReady, 8000); }); }
+      // el motor 3D se baja con barra de progreso real
+      var EST = 6794120, x = new XMLHttpRequest();
+      x.open('GET', 'lib/babylon.js');
+      x.onprogress = function (e) { set(85 * e.loaded / (e.lengthComputable ? e.total : EST)); };
+      x.onload = function () {
+        if (x.status >= 200 && x.status < 300) {
+          var url = URL.createObjectURL(new Blob([x.responseText], { type: 'text/javascript' }));
+          addScript(url, function () { URL.revokeObjectURL(url); loadGame(); });
+        } else addScript('lib/babylon.js', loadGame);
+      };
+      x.onerror = function () { addScript('lib/babylon.js', loadGame); };
+      x.send();
+    })();
+  </script>
   <script>
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
       navigator.serviceWorker.register('sw.js').catch(() => {});
