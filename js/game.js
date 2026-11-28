@@ -1591,21 +1591,13 @@
   // ------------------------------------------------------------------
   // Cámara y arma en pantalla
   // ------------------------------------------------------------------
-  let camBack = 0, lobbySpin = Math.PI * 0.15, lobbyDrag = null;
-  const LOBBY_STAGE = { x: 0, y: 0.05, z: 15 };
-  canvas.addEventListener('pointerdown', (e) => { if (state === 'menu') lobbyDrag = { x: e.clientX, id: e.pointerId }; });
-  addEventListener('pointermove', (e) => {
-    if (state !== 'menu' || !lobbyDrag || e.pointerId !== lobbyDrag.id) return;
-    lobbySpin += (e.clientX - lobbyDrag.x) * 0.012; lobbyDrag.x = e.clientX;
-  });
-  const lobbyUp = (e) => { if (lobbyDrag && e.pointerId === lobbyDrag.id) lobbyDrag = null; };
-  addEventListener('pointerup', lobbyUp); addEventListener('pointercancel', lobbyUp);
+  let camBack = 0;
+  const LOBBY_STAGE = { x: 0, y: 0.05, z: 15 }, LOBBY_YAW = Math.PI + 0.35; // quieto, mirando a la cámara
   const thirdPerson = () => cfg.cam === 'third' && state !== 'menu';
   const headPos = () => new V3(P.pos.x, P.pos.y + P.eyeH, P.pos.z);
   function updateCamera(dt) {
     if (state === 'menu') {
-      // Lobby: tu soldadito al centro, girando despacio (se puede girar arrastrando)
-      if (!lobbyDrag) lobbySpin += dt * 0.5;
+      // Lobby: tu soldadito quieto en el centro
       const st = LOBBY_STAGE;
       camera.rotationQuaternion = null; camera.fov = 0.8;
       camera.position.set(st.x, st.y + 1.15, st.z - 4.6);
@@ -1614,7 +1606,7 @@
       if (P.mesh) {
         P.mesh.setEnabled(true);
         P.mesh.position.set(st.x, st.y, st.z);
-        P.mesh.rotation.set(0, lobbySpin, 0); P.mesh.scaling.y = 1;
+        P.mesh.rotation.set(0, LOBBY_YAW, 0); P.mesh.scaling.y = 1;
       }
       return;
     }
