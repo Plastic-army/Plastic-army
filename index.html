@@ -63,6 +63,9 @@
   <div id="hud" class="hidden">
     <div id="score"></div>
     <div id="boxwarn" class="hidden"></div>
+    <div id="stormInfo" class="hidden"></div>
+    <div id="stormfx"></div>
+    <canvas id="minimap" width="200" height="200" class="hidden"></canvas>
     <div id="killfeed"></div>
     <div id="crosshair"><i></i><i></i><i></i><i></i></div>
     <div id="hitmarker">✕</div>
@@ -133,10 +136,15 @@
   <div id="mapPick" class="overlay hidden">
     <div class="panel">
       <h2>Elegir mapa</h2>
-      <p class="sub">Batalla campal: todos contra todos. Apareces en un lugar al azar y agarras las armas del piso con solo pasar por encima. ¡El último en pie gana!</p>
+      <p class="sub">50 jugadores. Caes en un lugar al azar, agarras las armas del piso con solo pasar por encima y escapas de la tormenta. ¡El último en pie gana!</p>
+      <div class="squad" id="squadPick">
+        <button data-squad="solo">Solo<small>Todos contra todos</small></button>
+        <button data-squad="duo">Dúos<small>Con un compañero que te puede revivir</small></button>
+      </div>
       <div class="mapCards">
-        <button class="mapCard" data-map="plaza"><img src="img/mapa-plaza.jpg" alt=""><b>Plaza</b><small>Al aire libre, con pasto, fuente y juegos · 16 jugadores</small></button>
-        <button class="mapCard" data-map="casa"><img src="img/mapa-casa.jpg" alt=""><b>Casa</b><small>Casa grande de 2 pisos con patio · 12 jugadores</small></button>
+        <button class="mapCard" data-map="plaza"><img src="img/mapa-plaza.jpg" alt=""><b>Plaza</b><small>Al aire libre: fuente, juegos, estanque y arenero</small></button>
+        <button class="mapCard" data-map="casa"><img src="img/mapa-casa.jpg" alt=""><b>Casa</b><small>Casa grande de 2 pisos con un patio enorme</small></button>
+        <button class="mapCard" data-map="barrio"><img src="img/mapa-barrio.jpg" alt=""><b>Barrio</b><small>Casas a los costados y una plaza en el medio</small></button>
       </div>
       <button id="mapBack" class="small">Volver</button>
     </div>
@@ -208,7 +216,7 @@
         <p class="help pc-only">WASD moverse · Ratón apuntar · Clic disparar · Clic derecho mirilla · 1/2/3 o rueda cambiar arma · R recargar · G canica · F usar caja (escudo o mega granada) · Espacio saltar · Shift correr · C agacharse · Esc pausa</p>
         <p class="help touch-only">Joystick izquierdo: moverte · Joystick derecho: apuntar. ¡Disparas solo cuando la mira toca a un enemigo!</p>
         <p class="help">4 equipos de 8: <b class="blue">AZUL</b> (el tuyo), <b class="red">ROJO</b>, <b class="green">VERDE</b> y <b class="yellow">AMARILLO</b>. 3 veces por partida aparece una caja sorpresa en la mesa del centro. El primer equipo en llegar a <b>50</b> eliminaciones gana. ¡Cuidado con caerte al pasto!</p>
-        <p class="help"><b>Batalla campal</b>: todos contra todos, sin volver a aparecer. Empiezas con la pistolita en un lugar al azar y agarras armas y canicas del piso con solo pasar por encima. Gana el último en pie.</p>
+        <p class="help"><b>Batalla campal</b> (50 jugadores, Solo o Dúos): empiezas con la pistolita en un lugar al azar y agarras armas y canicas del piso con solo pasar por encima. La tormenta violeta se va cerrando y afuera pierdes vida; el mapa chico de abajo a la izquierda te muestra la zona segura. En Dúos, si te eliminan y tu compañero pasa por tu chapita, vuelves cayendo del cielo con 50 de vida (una vez). Gana el último en pie.</p>
       </div>
       <button id="install" class="small hidden">Instalar el juego</button>
       <button id="settingsDone" class="cta">Listo</button>
