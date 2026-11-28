@@ -6,7 +6,7 @@ Soldaditos de juguete peleando en un jardín gigante, cuatro equipos y cuatro me
 
 ## Qué tiene este prototipo
 - Mapa **Jardín** (al aire libre): las 4 bases (mesas) están al norte, sur, este y oeste. Cada base tiene un puente directo a la gran mesa redonda del centro y puentes anchos (con cosas para cubrirse) hacia las bases vecinas, pasando por ladrillos en las esquinas. Si te caes al pasto, quedas eliminado.
-- **3 cajas sorpresa** en el mapa: escudo (7 s sin recibir daño), mega granada (mata de un golpe, mucho más alcance) o 200 de vida (se pierde al morir). El escudo y la mega granada se usan con la tecla **F** o el botón ⭐. Los bots también las agarran. Cada caja vuelve a aparecer 40 s después.
+- **3 cajas sorpresa por partida**, una por vez y siempre en la mesa del centro (avisa arriba 5 s antes): escudo (7 s sin recibir daño), mega granada (mata de un golpe, mucho más alcance) o 200 de vida (se pierde al morir). El escudo y la mega granada se usan con la tecla **F** o el botón ⭐. Los bots también las agarran.
 - 3 armas de juguete: **rifle de bolitas**, **escopeta de corchos**, **lanzadardos** (con mirilla), más la **granada de canica**.
 - 4 clases: Fusilero, Escudero, Explorador e Ingeniero.
 - 4 equipos de 8: Azul (tú + 7 bots), Rojo, Verde y Amarillo (8 bots cada uno). Gana el primero en llegar a 50 eliminaciones.

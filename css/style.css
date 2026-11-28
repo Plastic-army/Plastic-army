@@ -24,6 +24,8 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 10
 #score b { font-size: 24px; }
 @media (max-width: 760px) { #score { gap: 8px; font-size: 13px; padding: 4px 10px; } #score b { font-size: 18px; } }
 #score .goal { font-size: 12px; opacity: .8; }
+#boxwarn { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 46px); left: 50%; transform: translateX(-50%); background: rgba(255,190,11,.9); color: #2b2d42; text-shadow: none; font-weight: 900; font-size: 17px; padding: 5px 14px; border-radius: 999px; white-space: nowrap; animation: pulse .6s ease-in-out infinite alternate; }
+@keyframes pulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.06); } }
 #killfeed { position: absolute; top: 64px; right: 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; font-size: 13px; }
 #killfeed div { background: rgba(20,20,40,.5); padding: 3px 8px; border-radius: 6px; animation: fadein .2s; }
 #killfeed .t0 { color: #8ec5ff; font-weight: 700; } #killfeed .t1 { color: #ff8a95; font-weight: 700; }
