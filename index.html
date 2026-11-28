@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Plastic Army</title>
-  <meta name="description" content="Plastic Army: soldaditos de juguete en un escritorio gigante. Prototipo jugable.">
+  <meta name="description" content="Plastic Army: soldaditos de juguete en un jardín: cuatro equipos, cuatro mesas. Prototipo jugable.">
   <meta name="theme-color" content="#3a86ff">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -19,7 +19,7 @@
 
   <!-- HUD -->
   <div id="hud" class="hidden">
-    <div id="score"><span class="team blue">AZUL <b id="sb">0</b></span><span class="goal">Meta: 30</span><span class="team red"><b id="sr">0</b> ROJO</span></div>
+    <div id="score"></div>
     <div id="killfeed"></div>
     <div id="crosshair"><i></i><i></i><i></i><i></i></div>
     <div id="hitmarker">✕</div>
@@ -63,7 +63,7 @@
   <div id="menu" class="overlay">
     <div class="panel">
       <h1>PLASTIC <span>ARMY</span></h1>
-      <p class="sub">Batalla en el Escritorio · prototipo</p>
+      <p class="sub">Batalla en el Jardín · 4 equipos · prototipo</p>
       <div class="group">
         <div class="label">Elige tu clase</div>
         <div class="choices" id="classChoices">
@@ -76,15 +76,15 @@
       <div class="group">
         <div class="label">Dificultad</div>
         <div class="choices" id="diffChoices">
-          <button data-diff="facil">Fácil<small>4 contra 3</small></button>
-          <button data-diff="normal" class="sel">Normal<small>4 contra 4</small></button>
-          <button data-diff="dificil">Difícil<small>4 contra 5</small></button>
+          <button data-diff="facil">Fácil<small>Enemigos tranquilos</small></button>
+          <button data-diff="normal" class="sel">Normal<small>Enemigos atentos</small></button>
+          <button data-diff="dificil">Difícil<small>Enemigos expertos</small></button>
         </div>
       </div>
       <button id="play" class="cta">¡JUGAR!</button>
       <p class="help pc-only">WASD moverse · Ratón apuntar · Clic disparar · Clic derecho mirilla · 1/2/3 o rueda cambiar arma · R recargar · G canica · Espacio saltar · Shift correr · C agacharse · Esc pausa</p>
       <p class="help touch-only">Joystick izquierdo: moverte · Joystick derecho: apuntar. ¡Disparas solo cuando la mira toca a un enemigo!</p>
-      <p class="help">Eres del equipo <b class="blue">AZUL</b>. El primer equipo en llegar a <b>30</b> eliminaciones gana.</p>
+      <p class="help">4 equipos de 8: <b class="blue">AZUL</b> (el tuyo), <b class="red">ROJO</b>, <b class="green">VERDE</b> y <b class="yellow">AMARILLO</b>. Cada uno tiene su mesa; los puentes llevan a las otras bases y a la mesa redonda del medio. El primer equipo en llegar a <b>50</b> eliminaciones gana. ¡Cuidado con caerte al pasto!</p>
       <button id="install" class="small hidden">Instalar el juego</button>
     </div>
   </div>

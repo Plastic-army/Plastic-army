@@ -1,14 +1,14 @@
 # Plastic Army 🪖
 
-Soldaditos de juguete peleando en un escritorio gigante. Shooter en primera persona que se juega en el navegador (PC y celular) y se puede instalar como app.
+Soldaditos de juguete peleando en un jardín gigante, cuatro equipos y cuatro mesas. Shooter en primera persona que se juega en el navegador (PC y celular) y se puede instalar como app.
 
 **Jugar:** https://plastic-army.github.io/Plastic-army/ (cuando GitHub Pages esté activado)
 
 ## Qué tiene este prototipo
-- Mapa **Escritorio**: teclado como trinchera, pilas de libros, lámpara, monitor, taza, portalápices, borradores, dado…
+- Mapa **Jardín** (al aire libre): cada equipo tiene su mesa como base, puentes-regla con barandas unen las bases, y en el medio hay una gran mesa redonda con sombrilla. Si te caes al pasto, quedas eliminado.
 - 3 armas de juguete: **rifle de bolitas**, **escopeta de corchos**, **lanzadardos** (con mirilla), más la **granada de canica**.
 - 4 clases: Fusilero, Escudero, Explorador e Ingeniero.
-- Equipo Azul (tú + 3 bots) contra el equipo Rojo (3 a 5 bots según dificultad). Gana el primero en llegar a 30 eliminaciones.
+- 4 equipos de 8: Azul (tú + 7 bots), Rojo, Verde y Amarillo (8 bots cada uno). Gana el primero en llegar a 50 eliminaciones.
 - Al caer, los soldaditos explotan en confeti (sin sangre).
 - Controles de PC (WASD + ratón) y de celular (dos joysticks, disparo automático al apuntar a un enemigo).
 - Instalable (PWA) y funciona sin internet después de abrirlo una vez.

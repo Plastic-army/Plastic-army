@@ -1,5 +1,5 @@
 /* Plastic Army — prototipo de un jugador.
- * Soldaditos de juguete en un escritorio gigante. Todo se dibuja con formas simples
+ * Soldaditos de juguete en un jardín: cuatro equipos, cuatro mesas. Todo se dibuja con formas simples
  * (cajas, cilindros, esferas), así que no hace falta descargar modelos.
  */
 'use strict';
@@ -18,28 +18,28 @@
   const engine = new BABYLON.Engine(canvas, true, { stencil: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' }, true);
   engine.setHardwareScalingLevel(1 / Math.min(window.devicePixelRatio || 1, touchMode ? 1.5 : 2));
   const scene = new BABYLON.Scene(engine);
-  const ROOM_COLOR = C3.FromHexString('#fdf1dc');
-  scene.clearColor = new C4(ROOM_COLOR.r, ROOM_COLOR.g, ROOM_COLOR.b, 1);
+  const SKY_COLOR = C3.FromHexString('#a9dcff');
+  scene.clearColor = new C4(SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b, 1);
   scene.ambientColor = new C3(0.35, 0.35, 0.35);
   scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
-  scene.fogStart = 120; scene.fogEnd = 320; scene.fogColor = ROOM_COLOR;
+  scene.fogStart = 160; scene.fogEnd = 460; scene.fogColor = SKY_COLOR;
   scene.skipPointerMovePicking = true;
   scene.detachControl(); // los controles son nuestros; Babylon no debe tocar los clics
 
   const camera = new BABYLON.FreeCamera('cam', new V3(-34, 2, 0), scene);
-  camera.minZ = 0.05; camera.maxZ = 600; camera.fov = 1.15;
+  camera.minZ = 0.05; camera.maxZ = 900; camera.fov = 1.15;
   camera.inputs.clear();
 
   const hemi = new BABYLON.HemisphericLight('hemi', new V3(0.2, 1, -0.3), scene);
-  hemi.intensity = 0.72; hemi.groundColor = new C3(0.45, 0.4, 0.5);
+  hemi.intensity = 0.78; hemi.groundColor = new C3(0.42, 0.5, 0.38);
   const sun = new BABYLON.DirectionalLight('sun', new V3(-0.45, -1, -0.35), scene);
-  sun.position = new V3(60, 100, 60); sun.intensity = 0.75; sun.diffuse = C3.FromHexString('#fff4dd');
+  sun.position = new V3(90, 140, 90); sun.intensity = 0.85; sun.diffuse = C3.FromHexString('#fff4dd');
   let shadowGen = null;
   if (!touchMode) {
     shadowGen = new BABYLON.ShadowGenerator(2048, sun);
     shadowGen.usePercentageCloserFiltering = true;
     shadowGen.bias = 0.0015; shadowGen.normalBias = 0.02;
-    sun.shadowMinZ = 1; sun.shadowMaxZ = 300;
+    sun.shadowMinZ = 1; sun.shadowMaxZ = 400;
   }
   const casters = [];
   const addCaster = (m) => { if (shadowGen) shadowGen.addShadowCaster(m); };
@@ -48,10 +48,10 @@
   // Constantes del juego
   // ------------------------------------------------------------------
   const GRAV = 22, STEP = 0.65, RADIUS = 0.35, H = 1.8, H_CROUCH = 1.2, EYE = 1.55, EYE_CROUCH = 0.95;
-  const DESK_X = 40, DESK_Z = 22, BOT_X = 38.3, BOT_Z = 20.3;
-  const WIN_SCORE = 30;
-  const TEAM_NAME = ['Azul', 'Rojo'];
-  const TEAM_HEX = ['#3a86ff', '#ef233c'];
+  const WIN_SCORE = 50, TEAM_SIZE = 8, TEAMS = 4;
+  const TEAM_NAME = ['Azul', 'Rojo', 'Verde', 'Amarillo'];
+  const TEAM_HEX = ['#3a86ff', '#ef233c', '#2fb344', '#ffbe0b'];
+  const TEAM_LIGHT = ['#8ec5ff', '#ff8a95', '#8fe39b', '#ffe08a'];
 
   const WEAPONS = [
     { id: 'rifle', name: 'Rifle de bolitas', mag: 30, rate: 9, dmg: 13, pellets: 1, spread: 0.012, speed: 95, gravity: 3, range: 90, reload: 1.6, kick: 0.012, proj: 'pellet', sound: 'rifle', ideal: 16 },
@@ -65,12 +65,14 @@
     ingeniero: { name: 'Ingeniero', hp: 100, speed: 6.0, jump: 8.3, nades: 4, reloadMul: 1 }
   };
   const DIFFS = {
-    facil: { enemies: 3, spread: 0.1, reaction: 0.85, dmg: 0.55, turn: 3.2, rateMul: 1.6 },
-    normal: { enemies: 4, spread: 0.055, reaction: 0.55, dmg: 0.75, turn: 4.8, rateMul: 1.25 },
-    dificil: { enemies: 5, spread: 0.03, reaction: 0.32, dmg: 0.95, turn: 7, rateMul: 1 }
+    facil: { spread: 0.1, reaction: 0.85, dmg: 0.55, turn: 3.2, rateMul: 1.6 },
+    normal: { spread: 0.055, reaction: 0.55, dmg: 0.75, turn: 4.8, rateMul: 1.25 },
+    dificil: { spread: 0.03, reaction: 0.32, dmg: 0.95, turn: 7, rateMul: 1 }
   };
   const ALLY_SKILL = { spread: 0.05, reaction: 0.5, dmg: 0.8, turn: 5, rateMul: 1.2 };
-  const BOT_NAMES = ['Cabo Botón', 'Sargento Tapita', 'Soldado Clip', 'Capitán Goma', 'Teniente Lápiz', 'Cabo Chicle', 'Sargento Dado', 'Soldado Canica', 'Cabo Tuerca', 'Soldado Crayón'];
+  const BOT_RANKS = ['Cabo', 'Sargento', 'Soldado', 'Capitán', 'Teniente', 'Coronel'];
+  const BOT_NOUNS = ['Botón', 'Tapita', 'Clip', 'Goma', 'Lápiz', 'Chicle', 'Dado', 'Canica', 'Tuerca', 'Crayón', 'Yoyó', 'Trompo', 'Globo', 'Cubito', 'Pincel', 'Tiza',
+    'Corcho', 'Imán', 'Peón', 'Ficha', 'Resorte', 'Bolita', 'Chapita', 'Sacapuntas', 'Pompón', 'Galleta', 'Fideo', 'Piedrita', 'Hojita', 'Bellota', 'Semilla', 'Ramita', 'Pochoclo', 'Caramelo'];
 
   // ------------------------------------------------------------------
   // Materiales y utilidades de construcción
@@ -149,32 +151,148 @@
   }
 
   // ------------------------------------------------------------------
-  // El mapa: Escritorio
+  // El mapa: Jardín (al aire libre)
+  // Cuatro mesas (una base por equipo) en las esquinas, puentes-regla que las unen,
+  // y una gran mesa redonda en el medio. Si te caes al pasto, quedas eliminado.
   // ------------------------------------------------------------------
-  function buildWorld() {
-    // Habitación gigante alrededor
-    const floor = BABYLON.MeshBuilder.CreateGround('floor', { width: 700, height: 500 }, scene);
-    floor.position.y = -32; floor.material = mat('#9d8ac7'); finishStatic(floor, false);
-    const wallMat = mat('#fde8c4');
-    box('wallBack', 400, 220, 2, 0, -32, 95, wallMat, { collide: false, shadow: false });
-    box('wallFront', 400, 220, 2, 0, -32, -110, wallMat, { collide: false, shadow: false });
-    box('wallL', 2, 220, 260, -150, -32, 0, mat('#ffd6a5'), { collide: false, shadow: false });
-    box('wallR', 2, 220, 260, 150, -32, 0, mat('#ffd6a5'), { collide: false, shadow: false });
-    // ventana
-    const win = BABYLON.MeshBuilder.CreatePlane('window', { width: 90, height: 60 }, scene);
-    win.position.set(-50, 50, 93.9); win.material = mat('#bde0fe', { emissive: '#a9d6ff', noFog: true });
-    box('winFrameH', 94, 3, 2, -50, 18.5, 93.5, '#ffffff', { collide: false, shadow: false });
-    box('winFrameM', 3, 60, 2, -50, 20, 93.5, '#ffffff', { collide: false, shadow: false });
-    // póster
-    const poster = BABYLON.MeshBuilder.CreatePlane('poster', { width: 48, height: 24 }, scene);
-    poster.position.set(-148.8, 40, -20); poster.rotation.y = -Math.PI / 2;
-    const pm = new BABYLON.StandardMaterial('posterMat', scene); pm.diffuseTexture = logoTexture(); pm.emissiveColor = new C3(0.35, 0.35, 0.35); pm.specularColor = C3.Black();
-    poster.material = pm;
-    // silla gigante detrás del jugador rojo
-    box('chairSeat', 34, 4, 30, 72, -14, -8, '#264653', { collide: false });
-    box('chairBack', 4, 40, 30, 90, -10, -8, '#264653', { collide: false });
+  const BASE_D = 40, TABLE_HALF = 12, BRIDGE_W = 4, RAIL = 0.3, CIRCLE_R = 16, JUNC_HALF = 4, ENTRY_R = 13;
+  const GROUND_Y = -30;
+  const TEAM_CORNER = [[-1, -1], [1, 1], [1, -1], [-1, 1]]; // Azul, Rojo, Verde, Amarillo (Azul y Rojo quedan enfrentados)
+  const baseCenter = (t) => ({ x: TEAM_CORNER[t][0] * BASE_D, z: TEAM_CORNER[t][1] * BASE_D });
 
-    // Escritorio de madera
+  // --- Mapa para los bots: zonas por donde se puede caminar y un grafo de caminos ---
+  // Nodos: 0-3 centro de cada base, 4-7 cruces (ladrillos), 8-11 entradas del círculo
+  const NODES = [];
+  for (let t = 0; t < TEAMS; t++) NODES.push(baseCenter(t));
+  const JUNC = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  JUNC.forEach(([x, z]) => NODES.push({ x: x * BASE_D, z: z * BASE_D }));
+  JUNC.forEach(([x, z]) => NODES.push({ x: x * ENTRY_R, z: z * ENTRY_R }));
+  const juncIdx = (x, z) => 4 + JUNC.findIndex(([a, b]) => a === x && b === z);
+  const EDGES = [];
+  for (let t = 0; t < TEAMS; t++) { const [sx, sz] = TEAM_CORNER[t]; EDGES.push([t, juncIdx(sx, 0)], [t, juncIdx(0, sz)]); }
+  for (let j = 0; j < 4; j++) EDGES.push([4 + j, 8 + j]);
+  // dentro del círculo solo se une cada entrada con las de al lado (así nadie choca con la sombrilla del centro)
+  EDGES.push([8, 10], [10, 9], [9, 11], [11, 8]);
+  const NN = NODES.length;
+  const ND = [], NEXT = [];
+  for (let i = 0; i < NN; i++) { ND.push(new Array(NN).fill(Infinity)); NEXT.push(new Array(NN).fill(-1)); ND[i][i] = 0; NEXT[i][i] = i; }
+  for (const [a, b] of EDGES) {
+    const d = Math.hypot(NODES[a].x - NODES[b].x, NODES[a].z - NODES[b].z);
+    ND[a][b] = ND[b][a] = d; NEXT[a][b] = b; NEXT[b][a] = a;
+  }
+  for (let k = 0; k < NN; k++) for (let i = 0; i < NN; i++) for (let j = 0; j < NN; j++) {
+    if (ND[i][k] + ND[k][j] < ND[i][j]) { ND[i][j] = ND[i][k] + ND[k][j]; NEXT[i][j] = NEXT[i][k]; }
+  }
+  // Zonas: rectángulos [x0,z0,x1,z1] o el círculo, cada una con los nodos que la tocan
+  const REGIONS = [];
+  const addRect = (x0, z0, x1, z1, nodes) => REGIONS.push({ rect: [x0, z0, x1, z1], nodes });
+  const CIRCLE_REGION = { circle: true, nodes: [8, 9, 10, 11] };
+  REGIONS.push(CIRCLE_REGION);
+  function inRegion(r, x, z, m = 0) {
+    if (r.circle) return x * x + z * z < (CIRCLE_R - 0.8 - m) ** 2;
+    return x > r.rect[0] + m && x < r.rect[2] - m && z > r.rect[1] + m && z < r.rect[3] - m;
+  }
+  const regionsAt = (x, z) => REGIONS.filter((r) => inRegion(r, x, z));
+  function walkable(x, z, m = 0) { for (const r of REGIONS) if (inRegion(r, x, z, m)) return true; return false; }
+  // ¿El tramo recto A→B pasa cerca de la sombrilla del centro?
+  function hitsCenter(ax, az, bx, bz) {
+    const dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1;
+    const t = clamp(-(ax * dx + az * dz) / L2, 0, 1);
+    return Math.hypot(ax + dx * t, az + dz * t) < 2.6;
+  }
+  // Camino de (ax,az) a (tx,tz) como lista de puntos, o null si no hay
+  function findRoute(ax, az, tx, tz) {
+    const sR = regionsAt(ax, az), gR = regionsAt(tx, tz);
+    if (!gR.length) return null;
+    const inCircle = (x, z) => inRegion(CIRCLE_REGION, x, z);
+    if (sR.some((r) => gR.includes(r)) && !(inCircle(ax, az) && hitsCenter(ax, az, tx, tz))) return [{ x: tx, z: tz }];
+    let starts = [...new Set(sR.flatMap((r) => r.nodes))];
+    if (!starts.length) { // fuera de toda zona: ir al nodo más cercano
+      let bi = 0, bd = Infinity;
+      NODES.forEach((n, i) => { const d = Math.hypot(n.x - ax, n.z - az); if (d < bd) { bd = d; bi = i; } });
+      starts = [bi];
+    }
+    const goals = [...new Set(gR.flatMap((r) => r.nodes))];
+    let best = null, bestC = Infinity;
+    for (const s of starts) {
+      if (inCircle(ax, az) && s >= 8 && hitsCenter(ax, az, NODES[s].x, NODES[s].z)) continue;
+      for (const g of goals) {
+        if (inCircle(tx, tz) && g >= 8 && hitsCenter(NODES[g].x, NODES[g].z, tx, tz)) continue;
+        const c = Math.hypot(NODES[s].x - ax, NODES[s].z - az) + ND[s][g] + Math.hypot(NODES[g].x - tx, NODES[g].z - tz);
+        if (c < bestC) { bestC = c; best = [s, g]; }
+      }
+    }
+    if (!best) return null;
+    const pts = [];
+    let n = best[0];
+    pts.push(NODES[n]);
+    while (n !== best[1]) { n = NEXT[n][best[1]]; if (n < 0) return null; pts.push(NODES[n]); }
+    pts.push({ x: tx, z: tz });
+    return pts.map((p) => ({ x: p.x, z: p.z }));
+  }
+
+  function stripeTexture(colors, n) {
+    return textTexture(512, 64, (c, w, h) => { for (let i = 0; i < n; i++) { c.fillStyle = colors[i % colors.length]; c.fillRect((i * w) / n, 0, w / n + 1, h); } });
+  }
+
+  function buildWorld() {
+    // --- Pasto, cielo y alrededores ---
+    const grassMat = new BABYLON.StandardMaterial('grass', scene);
+    grassMat.diffuseTexture = textTexture(512, 512, (c, w, h) => {
+      c.fillStyle = '#6cc04a'; c.fillRect(0, 0, w, h);
+      for (let i = 0; i < 2600; i++) { c.fillStyle = pick(['#5fb33e', '#7ccd55', '#58a83a', '#86d65f']); c.fillRect(Math.random() * w, Math.random() * h, 2, 5 + Math.random() * 6); }
+    });
+    grassMat.diffuseTexture.uScale = 40; grassMat.diffuseTexture.vScale = 40;
+    grassMat.specularColor = C3.Black();
+    const ground = BABYLON.MeshBuilder.CreateGround('ground', { width: 1200, height: 1200 }, scene);
+    ground.position.y = GROUND_Y; ground.material = grassMat; finishStatic(ground, false);
+
+    // árboles lejanos
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + rand(-0.15, 0.15), r = rand(170, 250);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r, th = rand(70, 110);
+      cyl('trunk', rand(7, 11), th, x, GROUND_Y, z, mat('#8d5a34'), { collide: false, shadow: false, tess: 12 });
+      for (let k = 0; k < 3; k++) {
+        const f = BABYLON.MeshBuilder.CreateSphere('leaf', { diameter: rand(45, 65), segments: 8 }, scene);
+        f.position.set(x + rand(-14, 14), GROUND_Y + th + rand(-6, 14), z + rand(-14, 14));
+        f.material = mat(pick(['#3f9b3a', '#4caf50', '#2e8b3a'])); finishStatic(f, false);
+      }
+    }
+    // nubes
+    const cloudMat = mat('#ffffff', { emissive: '#e8f4ff', noFog: true });
+    for (let i = 0; i < 10; i++) {
+      const a = rand(0, Math.PI * 2), r = rand(150, 320), x = Math.cos(a) * r, z = Math.sin(a) * r, y = rand(120, 170);
+      for (let k = 0; k < 4; k++) {
+        const c = BABYLON.MeshBuilder.CreateSphere('cloud', { diameter: rand(22, 38), segments: 8 }, scene);
+        c.position.set(x + k * rand(12, 18) - 25, y + rand(-4, 4), z + rand(-8, 8)); c.scaling.y = 0.55;
+        c.material = cloudMat; finishStatic(c, false);
+      }
+    }
+    // flores gigantes y arbustos que asoman entre las mesas
+    const flower = (x, z, hgt, petal) => {
+      cyl('stem', 0.9, hgt, x, GROUND_Y, z, mat('#3c9a3c'), { collide: false, shadow: false, tess: 8 });
+      const top = GROUND_Y + hgt;
+      for (let k = 0; k < 6; k++) {
+        const p = BABYLON.MeshBuilder.CreateSphere('petal', { diameter: 3.2, segments: 8 }, scene);
+        p.position.set(x + Math.cos(k * 1.047) * 2.2, top, z + Math.sin(k * 1.047) * 2.2); p.scaling.y = 0.35;
+        p.material = plastic(petal); finishStatic(p, false);
+      }
+      const ctr = BABYLON.MeshBuilder.CreateSphere('fc', { diameter: 2.6, segments: 8 }, scene);
+      ctr.position.set(x, top + 0.3, z); ctr.scaling.y = 0.6; ctr.material = plastic('#ffd23f'); finishStatic(ctr, false);
+    };
+    [[0, 64, 26], [64, 0, 24], [0, -64, 27], [-64, 0, 25], [22, 22, 20], [-22, -22, 21], [-24, 20, 18], [24, -22, 19], [70, 52, 30], [-68, -56, 29], [52, -72, 31], [-56, 70, 28]]
+      .forEach(([x, z, hh], i) => flower(x, z, hh, ['#ff70a6', '#ffffff', '#c77dff', '#ff9f1c'][i % 4]));
+    for (const [x, z] of [[-90, 20], [90, -20], [20, 92], [-20, -92], [84, 84], [-86, -84]]) {
+      const b = BABYLON.MeshBuilder.CreateSphere('bush', { diameter: rand(22, 30), segments: 10 }, scene);
+      b.position.set(x, GROUND_Y + 6, z); b.scaling.y = 0.75; b.material = mat('#4e9f3d'); finishStatic(b, false);
+    }
+    // una pelota gigante tirada en el pasto
+    const ball = BABYLON.MeshBuilder.CreateSphere('ball', { diameter: 26, segments: 20 }, scene);
+    ball.position.set(-30, GROUND_Y + 13, 88);
+    const bm = new BABYLON.StandardMaterial('ballMat', scene); bm.diffuseTexture = stripeTexture(['#ff006e', '#ffffff', '#3a86ff', '#ffffff', '#ffd23f', '#ffffff'], 6); bm.specularColor = new C3(0.4, 0.4, 0.4);
+    ball.material = bm; finishStatic(ball, false);
+
+    // --- Materiales ---
     const wood = new BABYLON.StandardMaterial('wood', scene);
     wood.diffuseTexture = textTexture(512, 512, (c, w, h) => {
       c.fillStyle = '#d4a373'; c.fillRect(0, 0, w, h);
@@ -185,101 +303,155 @@
         c.stroke();
       }
     });
-    wood.diffuseTexture.uScale = 3; wood.diffuseTexture.vScale = 2;
+    wood.diffuseTexture.uScale = 2; wood.diffuseTexture.vScale = 2;
     wood.specularColor = new C3(0.12, 0.1, 0.08);
-    box('desk', DESK_X * 2, 2, DESK_Z * 2, 0, -2, 0, wood, { shadow: false });
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) box('leg', 3, 30, 3, sx * (DESK_X - 3), -32, sz * (DESK_Z - 3), '#a47148', { collide: false });
+    const rulerMat = new BABYLON.StandardMaterial('ruler', scene);
+    rulerMat.diffuseTexture = textTexture(512, 64, (c, w, h) => {
+      c.fillStyle = '#ffd166'; c.fillRect(0, 0, w, h);
+      c.fillStyle = '#7a5c12';
+      for (let i = 0; i <= 50; i++) { const x = (i * w) / 50; c.fillRect(x, 0, 2, i % 5 === 0 ? 22 : 11); c.fillRect(x, h - (i % 5 === 0 ? 22 : 11), 2, 22); }
+    });
+    rulerMat.specularColor = new C3(0.3, 0.3, 0.3);
 
-    // Teclado: la trinchera del medio
-    box('kbd', 8, 1.0, 24, 0, 0, 0, '#e9ecef');
-    addCollider(-4, 1.0, -12, 4, 1.4, 12);
-    const keys = [], fancy = [];
-    for (let i = 0; i < 5; i++) for (let j = 0; j < 17; j++) {
-      const k = BABYLON.MeshBuilder.CreateBox('key', { width: 1.0, height: 0.4, depth: 1.0 }, scene);
-      k.position.set(-2.6 + i * 1.3, 1.2, -10.4 + j * 1.3);
-      ((i === 1 && (j === 3 || j === 13)) || (i === 2 && (j === 2 || j === 3 || j === 4 || j === 12 || j === 13 || j === 14)) ? fancy : keys).push(k);
+    // --- Mesa redonda del centro (con sombrilla) ---
+    cyl('roundTop', CIRCLE_R * 2, 2, 0, -2, 0, wood, { collide: false, shadow: false, tess: 64 });
+    cyl('roundRim', CIRCLE_R * 2 + 0.4, 0.5, 0, -2.2, 0, '#a47148', { collide: false, shadow: false, tess: 64 });
+    cyl('roundLeg', 4, 28, 0, GROUND_Y, 0, '#a47148', { collide: false, shadow: false });
+    cyl('roundFoot', 16, 1.2, 0, GROUND_Y, 0, '#a47148', { collide: false, shadow: false });
+    // el piso del círculo se arma con franjas cruzadas (la física solo entiende cajas)
+    const STRIPS = 16, sw = (CIRCLE_R * 2) / STRIPS;
+    for (let i = 0; i < STRIPS; i++) {
+      const z0 = -CIRCLE_R + i * sw, z1 = z0 + sw, zEdge = Math.max(Math.abs(z0), Math.abs(z1));
+      const hw = Math.sqrt(Math.max(0, CIRCLE_R * CIRCLE_R - zEdge * zEdge));
+      if (hw > 0.5) { addCollider(-hw, -2, z0, hw, 0, z1); addCollider(z0, -2, -hw, z1, 0, hw); } // franjas en las dos direcciones
     }
-    const sp = BABYLON.MeshBuilder.CreateBox('space', { width: 1.0, height: 0.4, depth: 9 }, scene); sp.position.set(3.2, 1.2, 0); keys.push(sp);
-    const km = BABYLON.Mesh.MergeMeshes(keys, true, true); km.material = plastic('#adb5bd'); finishStatic(km);
-    const fm = BABYLON.Mesh.MergeMeshes(fancy, true, true); fm.material = plastic('#ff9f1c'); finishStatic(fm);
+    cyl('umbPole', 0.8, 16, 0, 0, 0, '#f1f3f5', { tess: 12 });
+    cyl('umbBase', 4, 0.8, 0, 0, 0, '#495057');
+    const canopy = BABYLON.MeshBuilder.CreateCylinder('canopy', { diameterTop: 0.6, diameterBottom: 24, height: 4.5, tessellation: 16 }, scene);
+    canopy.position.set(0, 14.5, 0);
+    const cm = new BABYLON.StandardMaterial('canopyMat', scene); cm.diffuseTexture = stripeTexture(['#ff4d6d', '#ffffff'], 16); cm.specularColor = new C3(0.2, 0.2, 0.2); cm.backFaceCulling = false;
+    canopy.material = cm; finishStatic(canopy);
+    // bloques de juguete para cubrirse en el centro
+    [[1, 1, 2.4, '#ff9f1c'], [-1, -1, 2.4, '#8338ec'], [1, -1, 1.2, '#06d6a0'], [-1, 1, 1.2, '#ff70a6']].forEach(([sx, sz, hh, col]) => {
+      box('block', 2.4, hh, 2.4, sx * 4.2, 0, sz * 4.2, col);
+    });
+    [[0.38, 0.92], [-0.92, 0.38], [-0.38, -0.92], [0.92, -0.38]].forEach(([x, z], i) => {
+      box('cBlock', 2, 1.2, 2, x * 12, 0, z * 12, ['#3a86ff', '#ef233c', '#2fb344', '#ffbe0b'][i]);
+    });
 
-    // Pilas de libros (subidas para francotiradores)
-    const bookStack = (cx, cz, flip, colors) => {
-      const sizes = [[12, 14, 0, 0], [10, 11.5, 0.6, 0.5], [8, 9, -0.4, 0.8], [6, 6.5, 0.5, 0.2]];
-      sizes.forEach(([w, d, ox, oz], i) => {
-        const x = cx + ox * flip, z = cz + oz * flip;
-        box('book', w, 1, d, x, i, z, colors[i]);
-        box('pages', 0.2, 0.8, d - 0.6, x + (w / 2 + 0.05) * flip, i + 0.1, z, '#fffdf5', { collide: false, shadow: false });
-      });
-    };
-    bookStack(-16, 13, 1, ['#3a86ff', '#ffbe0b', '#8338ec', '#06d6a0']);
-    bookStack(16, -13, -1, ['#ef233c', '#06d6a0', '#ffbe0b', '#3a86ff']);
-
-    // Lámpara
-    cyl('lampBase', 7, 0.8, -27, 0, 16, '#17a2b8');
-    cyl('lampPole', 0.8, 18, -27, 0.8, 16, '#17a2b8');
-    const top = new V3(-27, 18.8, 16), end = new V3(-19, 23, 9);
-    beam('lampArm', 0.7, top, end, '#17a2b8');
-    const shade = BABYLON.MeshBuilder.CreateCylinder('shade', { diameterTop: 2.2, diameterBottom: 8, height: 5, tessellation: 28 }, scene);
-    shade.position.set(-18, 21, 8); shade.rotation.x = 0.35; shade.rotation.z = -0.25; shade.material = plastic('#17a2b8'); finishStatic(shade);
-    const bulb = BABYLON.MeshBuilder.CreateSphere('bulb', { diameter: 3, segments: 12 }, scene);
-    bulb.position.set(-17.6, 19.2, 7.4); bulb.material = mat('#fff3b0', { emissive: '#fff3b0' }); finishStatic(bulb, false);
-    const spot = new BABYLON.SpotLight('lampLight', new V3(-17.6, 19, 7.4), new V3(0.15, -1, -0.15), 1.3, 2, scene);
-    spot.diffuse = C3.FromHexString('#ffe8a3'); spot.intensity = 0.7; spot.range = 60;
-
-    // Monitor gigante (fondo)
-    box('monBase', 10, 0.5, 6, 12, 0, 18.5, '#343a40');
-    box('monNeck', 1.6, 9, 1.2, 12, 0.5, 19.8, '#343a40');
-    box('monFrame', 38, 21, 1.2, 12, 8, 20.8, '#212529', { collide: false });
-    const screen = BABYLON.MeshBuilder.CreatePlane('screen', { width: 36, height: 19 }, scene);
-    screen.position.set(12, 18.5, 20.15); screen.rotation.y = Math.PI;
-    const sm = new BABYLON.StandardMaterial('screenMat', scene); sm.diffuseTexture = logoTexture(); sm.emissiveTexture = sm.diffuseTexture; sm.specularColor = C3.Black(); sm.disableLighting = true;
-    screen.material = sm; screen.rotation.y = 0;
-    finishStatic(screen, false);
-
-    // Taza de café y portalápices
-    cyl('mug', 5.6, 4, 25, 0, 14, '#ef476f');
-    const handle = BABYLON.MeshBuilder.CreateTorus('handle', { diameter: 2.6, thickness: 0.6, tessellation: 20 }, scene);
-    handle.position.set(28, 2, 14); handle.rotation.x = Math.PI / 2; handle.material = plastic('#ef476f'); finishStatic(handle);
-    cyl('coffee', 5.0, 0.1, 25, 3.7, 14, '#6f4518', { collide: false });
-    cyl('pencilCup', 4.6, 5, -24, 0, -14, '#118ab2');
-    for (let i = 0; i < 4; i++) {
-      const a = i * 1.6;
-      beam('pencil', 0.5, new V3(-24 + Math.cos(a) * 0.8, 1, -14 + Math.sin(a) * 0.8), new V3(-24 + Math.cos(a) * 2.6, 10 + i * 0.6, -14 + Math.sin(a) * 2.6), pick(['#ffbe0b', '#fb5607', '#8338ec', '#06d6a0']));
+    // --- Puentes (reglas con barandas de lápiz) ---
+    const railMats = ['#ffbe0b', '#fb5607', '#8338ec', '#06d6a0'];
+    function bridge(ax, az, bx, bz, nodes) {
+      const alongX = az === bz, hw = BRIDGE_W / 2;
+      const x0 = alongX ? Math.min(ax, bx) : ax - hw, x1 = alongX ? Math.max(ax, bx) : ax + hw;
+      const z0 = alongX ? az - hw : Math.min(az, bz), z1 = alongX ? az + hw : Math.max(az, bz);
+      const w = x1 - x0, d = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      const len = alongX ? w : d;
+      const m = BABYLON.MeshBuilder.CreateBox('bridge', { width: len, height: 0.6, depth: BRIDGE_W }, scene);
+      m.position.set(cx, -0.3, cz); if (!alongX) m.rotation.y = Math.PI / 2;
+      m.material = rulerMat; finishStatic(m, false);
+      addCollider(x0, -0.6, z0, x1, 0, z1);
+      for (const s of [-1, 1]) {
+        const rc = s * (hw - RAIL / 2);
+        // la baranda
+        if (alongX) addCollider(x0, 0, az + rc - RAIL / 2, x1, 1.1, az + rc + RAIL / 2);
+        else addCollider(ax + rc - RAIL / 2, 0, z0, ax + rc + RAIL / 2, 1.1, z1);
+        const a = alongX ? new V3(x0, 1.0, az + rc) : new V3(ax + rc, 1.0, z0);
+        const b = alongX ? new V3(x1, 1.0, az + rc) : new V3(ax + rc, 1.0, z1);
+        beam('rail', 0.32, a, b, pick(railMats));
+        const posts = Math.max(2, Math.round(len / 4));
+        for (let i = 0; i <= posts; i++) {
+          const k = i / posts;
+          const px = alongX ? x0 + w * k : ax + rc, pz = alongX ? az + rc : z0 + d * k;
+          box('post', 0.25, 1.0, 0.25, px, 0, pz, '#adb5bd', { collide: false });
+        }
+      }
+      // zona caminable (un poco más larga para que empalme con lo que une)
+      if (alongX) addRect(x0 - 1.5, z0 + RAIL, x1 + 1.5, z1 - RAIL, nodes); else addRect(x0 + RAIL, z0 - 1.5, x1 - RAIL, z1 + 1.5, nodes);
+    }
+    // cruces: ladrillos de juguete
+    JUNC.forEach(([jx, jz], j) => {
+      const x = jx * BASE_D, z = jz * BASE_D, s = JUNC_HALF * 2;
+      box('brick', s, 2, s, x, -2, z, '#e63946', { shadow: false });
+      for (const ox of [-2, 2]) for (const oz of [-2, 2]) cyl('stud', 2.2, 0.25, x + ox, 0, z + oz, '#e63946', { collide: false, shadow: false, tess: 16 });
+      cyl('brickLeg', 2, 28, x, GROUND_Y, z, '#adb5bd', { collide: false, shadow: false, tess: 10 });
+      addRect(x - JUNC_HALF, z - JUNC_HALF, x + JUNC_HALF, z + JUNC_HALF, [4 + j]);
+      // del cruce al círculo
+      if (jz === 0) bridge(jx * (BASE_D - JUNC_HALF), 0, jx * (CIRCLE_R - 0.1), 0, [4 + j, 8 + j]);
+      else bridge(0, jz * (BASE_D - JUNC_HALF), 0, jz * (CIRCLE_R - 0.1), [4 + j, 8 + j]);
+    });
+    // de cada base a sus dos cruces vecinos
+    for (let t = 0; t < TEAMS; t++) {
+      const [sx, sz] = TEAM_CORNER[t], cx = sx * BASE_D, cz = sz * BASE_D;
+      bridge(cx, sz * (BASE_D - TABLE_HALF), cx, sz * JUNC_HALF, [t, juncIdx(sx, 0)]);
+      bridge(sx * (BASE_D - TABLE_HALF), cz, sx * JUNC_HALF, cz, [t, juncIdx(0, sz)]);
     }
 
-    // Cosas pequeñas para cubrirse
-    const eraser = (x, z) => { box('eraser', 2.8, 1.0, 1.5, x, 0, z, '#ff8fab'); box('sleeve', 1.1, 1.06, 1.56, x - 0.3, 0, z, '#3a86ff', { collide: false }); };
-    eraser(-20, 1); eraser(20, -1); eraser(-1, 17.5);
-    box('sticky1', 3.2, 2.2, 3.2, -28, 0, 5, '#ffd60a');
-    box('sticky2', 3.2, 2.2, 3.2, 28, 0, -5, '#9ef01a');
-    box('dice', 2.6, 2.6, 2.6, 0, 0, -17.5, '#e63946');
-    for (const [dx, dz] of [[-0.6, -0.6], [0.6, 0.6], [0, 0], [-0.6, 0.6], [0.6, -0.6]]) {
-      const dot = BABYLON.MeshBuilder.CreateCylinder('dot', { diameter: 0.4, height: 0.06, tessellation: 10 }, scene);
-      dot.position.set(dx, 2.62, -17.5 + dz); dot.material = plastic('#ffffff'); finishStatic(dot, false);
-    }
-    // Ratón de computadora
-    const mouse = BABYLON.MeshBuilder.CreateSphere('mouse', { diameter: 1, segments: 16 }, scene);
-    mouse.scaling.set(3.6, 1.7, 6); mouse.position.set(-9, 0.2, -15); mouse.material = plastic('#dee2e6'); finishStatic(mouse);
-    addCollider(-10.6, 0, -17.6, -7.4, 1.05, -12.4);
-    // Celular, cuaderno, calculadora, regla, lápiz
-    box('phone', 3.6, 0.45, 7, -13, 0, -5, '#212529');
-    box('phoneScreen', 3.1, 0.02, 6.2, -13, 0.45, -5, mat('#4cc9f0', { emissive: '#1b6f8a' }), { collide: false, shadow: false });
-    box('notebook', 8, 0.4, 10, 11, 0, 3, '#06d6a0');
-    box('nbPaper', 7.4, 0.42, 9.6, 11.2, 0, 3, '#fffdf5', { collide: false, shadow: false });
-    box('calc', 5, 0.8, 7.5, 28, 0, -16, '#6c757d');
-    box('calcScreen', 3.6, 0.05, 1.6, 28, 0.8, -18.5, mat('#b5e48c', { emissive: '#4f772d' }), { collide: false, shadow: false });
-    box('ruler', 14, 0.15, 1.5, 6, 0, -20, '#ffe066');
-    cyl('pencilLying', 0.6, 8, -6, 0.3, 19, '#ffbe0b', { collide: false });
-    statics[statics.length - 1].rotation.z = Math.PI / 2; statics[statics.length - 1].position.y = 0.3;
-    addCollider(-10, 0, 18.7, -2, 0.6, 19.3);
-    cyl('pencilLying2', 0.6, 8, 21, 0.3, 8, '#fb5607', { collide: false });
-    statics[statics.length - 1].rotation.x = Math.PI / 2; statics[statics.length - 1].position.y = 0.3;
-    addCollider(20.7, 0, 4, 21.3, 0.6, 12);
+    // --- Las cuatro bases: una mesa por equipo ---
+    for (let t = 0; t < TEAMS; t++) buildBase(t, wood);
 
+    mergeStatics();
     statics.forEach((m) => m.freezeWorldMatrix());
   }
 
+  // Junta las piezas quietas que comparten material en una sola malla: muchas menos llamadas de dibujo (clave en celulares)
+  function mergeStatics() {
+    const shadowList = shadowGen ? shadowGen.getShadowMap().renderList : [];
+    const groups = new Map();
+    for (const m of statics) {
+      if (!m.material) continue;
+      const casts = shadowList.includes(m);
+      const key = m.material.uniqueId + (casts ? 's' : 'n');
+      if (!groups.has(key)) groups.set(key, { mtl: m.material, casts, list: [] });
+      groups.get(key).list.push(m);
+    }
+    statics.length = 0;
+    for (const { mtl, casts, list } of groups.values()) {
+      if (list.length === 1) { statics.push(list[0]); continue; }
+      if (casts) list.forEach((m) => shadowGen.removeShadowCaster(m));
+      const merged = BABYLON.Mesh.MergeMeshes(list, true, true);
+      if (!merged) { statics.push(...list); continue; }
+      merged.material = mtl; merged.receiveShadows = true;
+      if (casts) addCaster(merged);
+      statics.push(merged);
+    }
+  }
+
+  function buildBase(t, wood) {
+    const [sx, sz] = TEAM_CORNER[t], cx = sx * BASE_D, cz = sz * BASE_D, H2 = TABLE_HALF;
+    // (u, v) son coordenadas de la base: positivas = hacia afuera del mapa
+    const L = (u, v) => [cx + u * sx, cz + v * sz];
+    const team = TEAM_HEX[t];
+    box('table', H2 * 2, 2, H2 * 2, cx, -2, cz, wood, { shadow: false });
+    for (const a of [-1, 1]) for (const b of [-1, 1]) box('tLeg', 2.4, 28, 2.4, cx + a * (H2 - 2), GROUND_Y, cz + b * (H2 - 2), '#a47148', { collide: false, shadow: false });
+    addRect(cx - H2, cz - H2, cx + H2, cz + H2, [t]);
+    // mantel a cuadros del color del equipo
+    const cloth = new BABYLON.StandardMaterial('cloth' + t, scene);
+    cloth.diffuseTexture = textTexture(256, 256, (c, w, h) => {
+      c.fillStyle = '#ffffff'; c.fillRect(0, 0, w, h);
+      c.fillStyle = team; c.globalAlpha = 0.55;
+      for (let i = 0; i < 8; i++) { c.fillRect(i * 32, 0, 16, h); c.fillRect(0, i * 32, w, 16); }
+    });
+    cloth.diffuseTexture.uScale = cloth.diffuseTexture.vScale = 3; cloth.specularColor = C3.Black();
+    box('cloth', H2 * 2 - 1.5, 0.05, H2 * 2 - 1.5, cx, 0, cz, cloth, { collide: false, shadow: false });
+    // bandera en la esquina de afuera
+    const [fx, fz] = L(9, 9);
+    cyl('flagPole', 0.4, 10, fx, 0, fz, '#f1f3f5', { tess: 10 });
+    const flag = BABYLON.MeshBuilder.CreateBox('flag', { width: 4, height: 2.6, depth: 0.12 }, scene);
+    flag.position.set(fx - 2.1 * sx, 8.6, fz); flag.material = plastic(team); finishStatic(flag);
+    // cosas para cubrirse (dejando libres los pasillos hacia los puentes)
+    const lb = L(-7, -7);
+    box('lunchbox', 5, 3, 5, lb[0], 0, lb[1], team);
+    box('lunchLid', 5.2, 0.4, 5.2, lb[0], 3, lb[1], TEAM_LIGHT[t], { collide: false });
+    const c1 = L(6, -6), c2 = L(-6, 6);
+    cyl('cup', 3, 4, c1[0], 0, c1[1], '#ffffff');
+    cyl('cup', 3, 4, c2[0], 0, c2[1], TEAM_LIGHT[t]);
+    const b1 = L(-8, 5), b2 = L(5, -8);
+    box('tBlock', 2, 1.2, 2, b1[0], 0, b1[1], '#ffd23f');
+    box('tBlock', 2, 1.2, 2, b2[0], 0, b2[1], '#ff70a6');
+    const pl = L(5, 5);
+    cyl('plate', 5, 0.15, pl[0], 0, pl[1], '#f8f9fa', { collide: false, shadow: false });
+  }
   // ------------------------------------------------------------------
   // Soldaditos (modelo hecho de piezas, un solo color como los de verdad)
   // ------------------------------------------------------------------
@@ -486,23 +658,25 @@
   let diff = DIFFS.normal;
 
   function spawnPoint(team) {
-    for (let i = 0; i < 30; i++) {
-      const x = (team === 0 ? -1 : 1) * rand(33, 37.5), z = rand(-17, 17);
+    // en la parte de afuera de la mesa de su equipo
+    const [sx, sz] = TEAM_CORNER[team], c = baseCenter(team);
+    for (let i = 0; i < 40; i++) {
+      const x = c.x + sx * rand(1.5, 10.5), z = c.z + sz * rand(1.5, 10.5);
       if (!freeSpot(x, z)) continue;
-      if (soldiers.some((s) => s.alive && s !== undefined && Math.hypot(s.pos.x - x, s.pos.z - z) < 1.6)) continue;
+      if (soldiers.some((s) => s.alive && s !== undefined && Math.hypot(s.pos.x - x, s.pos.z - z) < 1.4)) continue;
       return new V3(x, 0.05, z);
     }
-    return new V3(team === 0 ? -35 : 35, 0.05, rand(-4, 4));
+    return new V3(c.x + sx * rand(1, 4), 0.05, c.z + sz * rand(1, 4));
   }
   function respawn(s) {
     s.pos.copyFrom(spawnPoint(s.team)); s.vel.setAll(0);
-    s.alive = true; s.hp = s.maxHp; s.spawnProt = 1.5; s.yaw = s.team === 0 ? Math.PI / 2 : -Math.PI / 2; s.pitch = 0;
+    s.alive = true; s.hp = s.maxHp; s.spawnProt = 1.5; s.yaw = Math.atan2(-s.pos.x, -s.pos.z); s.pitch = 0;
     s.reloadT = 0; s.h = H;
     if (s === P) {
       P.weapons.forEach((w) => (w.ammo = w.def.mag)); P.nades = P.cls.nades; P.crouch = false;
       showMsg(''); updateHud(true);
     } else {
-      s.ammo = s.wdef.mag; s.target = null; s.wp = null; s.deathT = 0; s.stuckT = 0;
+      s.ammo = s.wdef.mag; s.target = null; s.route = null; s.lastSeen = null; s.pusher = Math.random() < 0.45; s.deathT = 0; s.stuckT = 0;
       s.mesh.setEnabled(true); s.mesh.rotation.set(0, s.yaw, 0);
       if (s.marker) s.marker.setEnabled(true);
     }
@@ -511,11 +685,11 @@
   function createBots() {
     bots.forEach((b) => { b.mesh.dispose(); });
     bots = [];
-    const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
-    const counts = [3, diff.enemies];
-    for (let team = 0; team < 2; team++) {
-      for (let i = 0; i < counts[team]; i++) {
-        const b = makeSoldier(team, true, names.pop());
+    // 8 por equipo: tu equipo tiene 7 bots + tú, los otros tres equipos 8 bots cada uno
+    const nouns = BOT_NOUNS.slice().sort(() => Math.random() - 0.5);
+    for (let team = 0; team < TEAMS; team++) {
+      for (let i = 0; i < TEAM_SIZE - (team === 0 ? 1 : 0); i++) {
+        const b = makeSoldier(team, true, pick(BOT_RANKS) + ' ' + (nouns.pop() || 'Juguete'));
         b.skill = team === 0 ? ALLY_SKILL : diff;
         b.wdef = WEAPONS[i % 3 === 2 ? (Math.random() < 0.5 ? 2 : 1) : (i % 3 === 1 ? 1 : 0)];
         b.mesh = makeSoldierMesh(b.name, TEAM_HEX[team]);
@@ -539,6 +713,8 @@
     const mk = (key, mesh, hex) => { mesh.material = mat(hex, { emissive: hex }); mesh.position.y = -999; projMasters[key] = mesh; };
     mk('pellet0', BABYLON.MeshBuilder.CreateSphere('pel', { diameter: 0.14, segments: 6 }, scene), '#7bdff2');
     mk('pellet1', BABYLON.MeshBuilder.CreateSphere('pel', { diameter: 0.14, segments: 6 }, scene), '#ff9e00');
+    mk('pellet2', BABYLON.MeshBuilder.CreateSphere('pel', { diameter: 0.14, segments: 6 }, scene), '#b8f35a');
+    mk('pellet3', BABYLON.MeshBuilder.CreateSphere('pel', { diameter: 0.14, segments: 6 }, scene), '#fff275');
     const cork = BABYLON.MeshBuilder.CreateCylinder('cork', { diameterTop: 0.15, diameterBottom: 0.19, height: 0.22, tessellation: 8 }, scene);
     cork.rotation.x = Math.PI / 2; cork.bakeCurrentTransformIntoVertices();
     projMasters.cork = cork; cork.material = mat('#e0b084', { emissive: '#7a5a3a' }); cork.position.y = -999;
@@ -648,7 +824,7 @@
   // ------------------------------------------------------------------
   // Daño, eliminaciones y marcador
   // ------------------------------------------------------------------
-  const score = [0, 0];
+  const score = new Array(TEAMS).fill(0);
   let state = 'menu', gameTime = 0, shake = 0;
 
   function damage(t, amount, attacker, head, how) {
@@ -673,22 +849,27 @@
     }
     if (attacker === P && t !== P) { sfx('kill'); showBanner(head ? '¡TIRO A LA CABEZA! +1' : '¡ELIMINADO! +1'); }
     updateHud(true);
-    if (score[0] >= WIN_SCORE || score[1] >= WIN_SCORE) endMatch();
+    if (state === 'playing' && score.some((v) => v >= WIN_SCORE)) endMatch();
   }
   let killerName = null;
 
   // ------------------------------------------------------------------
   // HUD
   // ------------------------------------------------------------------
-  const hud = { sb: $('sb'), sr: $('sr'), hpfill: $('hpfill'), hptext: $('hptext'), wname: $('wname'), ammo: $('ammo'), nades: $('nades'), slots: $('slots'), msg: $('msg'), dmg: $('dmg'), cross: $('crosshair'), hit: $('hitmarker'), banner: $('banner'), feed: $('killfeed') };
+  const hud = { score: $('score'), hpfill: $('hpfill'), hptext: $('hptext'), wname: $('wname'), ammo: $('ammo'), nades: $('nades'), slots: $('slots'), msg: $('msg'), dmg: $('dmg'), cross: $('crosshair'), hit: $('hitmarker'), banner: $('banner'), feed: $('killfeed') };
   let dmgFlash = 0, hitT = 0, bannerT = 0, lastHudKey = '';
+  // marcador de los 4 equipos
+  hud.score.innerHTML = TEAM_NAME.map((n, t) => `<span class="team" style="color:${TEAM_LIGHT[t]}">${n.toUpperCase()} <b id="sc${t}">0</b></span>`).join('') + `<span class="goal">Meta: ${WIN_SCORE}</span>`;
+  const scoreEls = TEAM_NAME.map((n, t) => $('sc' + t));
   WEAPONS.forEach((w, i) => { const s = document.createElement('span'); s.textContent = (i + 1) + ' ' + w.name.split(' ')[0]; hud.slots.appendChild(s); });
   function updateHud(force) {
     const w = P.weapons[P.wi];
-    const key = [score[0], score[1], Math.ceil(P.hp), P.wi, w.ammo, P.nades, P.reloadT > 0].join('|');
+    const key = [score.join(','), Math.ceil(P.hp), P.wi, w.ammo, P.nades, P.reloadT > 0].join('|');
     if (!force && key === lastHudKey) return;
     lastHudKey = key;
-    hud.sb.textContent = score[0]; hud.sr.textContent = score[1];
+    scoreEls.forEach((el, t) => { el.textContent = score[t]; });
+    const lead = Math.max(...score);
+    scoreEls.forEach((el, t) => el.parentNode.classList.toggle('lead', lead > 0 && score[t] === lead));
     const hp = Math.max(0, Math.ceil(P.hp));
     hud.hpfill.style.width = (100 * hp / P.maxHp) + '%'; hud.hpfill.classList.toggle('low', hp < P.maxHp * 0.35);
     hud.hptext.textContent = hp;
@@ -701,10 +882,10 @@
   function showBanner(t) { hud.banner.textContent = t; hud.banner.classList.add('show'); bannerT = 1.4; }
   function showMsg(t) { if (hud.msg.textContent !== t) hud.msg.textContent = t; }
   function addFeed(att, vic, how, head) {
-    const cls = (s) => (s === P ? 'me' : s.team === 0 ? 'b' : 'r');
+    const cls = (s) => (s === P ? 'me' : 't' + s.team);
     const icon = { rifle: '•', shotgun: '▮', dart: '➶', nade: '●', fall: '↓' }[how] || '•';
     const div = document.createElement('div');
-    if (!att || att === vic) div.innerHTML = `<span class="${cls(vic)}">${vic.name}</span> se cayó del escritorio`;
+    if (!att || att === vic) div.innerHTML = `<span class="${cls(vic)}">${vic.name}</span> se cayó al pasto`;
     else div.innerHTML = `<span class="${cls(att)}">${att.name}</span> ${icon}${head ? '✪' : ''} <span class="${cls(vic)}">${vic.name}</span>`;
     hud.feed.prepend(div);
     while (hud.feed.children.length > 5) hud.feed.lastChild.remove();
@@ -964,7 +1145,7 @@
   function updatePlayer(dt) {
     if (!P.alive) {
       P.deathT -= dt;
-      showMsg((killerName ? '¡Te eliminó ' + killerName + '!' : '¡Te caíste del escritorio!') + '\nVuelves en ' + Math.max(1, Math.ceil(P.deathT)) + '…');
+      showMsg((killerName ? '¡Te eliminó ' + killerName + '!' : '¡Te caíste al pasto!') + '\nVuelves en ' + Math.max(1, Math.ceil(P.deathT)) + '…');
       if (P.deathT <= 0) respawn(P);
       return;
     }
@@ -1027,7 +1208,7 @@
   function angDiff(a, b) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
   function findTarget(b) {
     const eye = eyeOf(b);
-    let best = null, bestD = 55;
+    let best = null, bestD = 60;
     for (const s of soldiers) {
       if (!s.alive || s.team === b.team) continue;
       const dx = s.pos.x - b.pos.x, dz = s.pos.z - b.pos.z, d = Math.hypot(dx, dz);
@@ -1039,12 +1220,40 @@
     }
     return best;
   }
-  function pickWaypoint(b) {
+  // Adónde va un bot cuando no ve enemigos: al círculo, a una base enemiga, a un cruce o a cuidar la suya
+  function pickGoal(b) {
+    const r = Math.random();
     for (let i = 0; i < 12; i++) {
-      const x = b.team === 0 ? rand(-30, 34) : rand(-34, 30), z = rand(-19, 19);
-      if (freeSpot(x, z)) return new V3(x, 0, z);
+      let x, z;
+      if (r < 0.35) { const a = rand(0, Math.PI * 2), d = rand(4, CIRCLE_R - 3); x = Math.cos(a) * d; z = Math.sin(a) * d; }
+      else if (r < 0.75 || r >= 0.9) {
+        let t = b.team;
+        if (r < 0.75) { const others = [0, 1, 2, 3].filter((k) => k !== b.team); t = pick(others); }
+        const c = baseCenter(t); x = c.x + rand(-9, 9); z = c.z + rand(-9, 9);
+      } else { const j = pick(JUNC); x = j[0] * BASE_D + rand(-2.5, 2.5); z = j[1] * BASE_D + rand(-2.5, 2.5); }
+      if (freeSpot(x, z) && walkable(x, z, 0.6)) return { x, z };
     }
-    return new V3(0, 0, b.pos.z > 0 ? 16 : -16);
+    return { x: 0, z: ENTRY_R };
+  }
+  // Dirección hacia el próximo punto del camino (o null si no hay camino)
+  function routeDir(b) {
+    while (b.route && b.route.length && Math.hypot(b.route[0].x - b.pos.x, b.route[0].z - b.pos.z) < 1.2) b.route.shift();
+    if (!b.route || !b.route.length) return null;
+    const dx = b.route[0].x - b.pos.x, dz = b.route[0].z - b.pos.z, d = Math.hypot(dx, dz) || 1;
+    return [dx / d, dz / d];
+  }
+  function planRoute(b, goal) {
+    return findRoute(b.pos.x, b.pos.z, goal.x, goal.z);
+  }
+  // Freno de seguridad: los bots no caminan hacia el borde de una mesa o un puente
+  function safeMove(b, mx, mz) {
+    if (!mx && !mz) return [0, 0];
+    const m = walkable(b.pos.x, b.pos.z, 0.45) ? 0.45 : 0, look = 0.9;
+    const ok = (x, z) => walkable(b.pos.x + x * look, b.pos.z + z * look, m);
+    if (ok(mx, mz)) return [mx, mz];
+    if (mx && ok(mx, 0)) return [mx, 0];
+    if (mz && ok(0, mz)) return [0, mz];
+    return [0, 0];
   }
   function updateBot(b, dt) {
     if (!b.alive) {
@@ -1066,8 +1275,14 @@
       const t = findTarget(b);
       if (t !== b.target) { b.target = t; b.seenT = 0; }
       if (t) b.lastSeen = t.pos.clone();
-      if (!t && (!b.wp || Math.hypot(b.wp.x - b.pos.x, b.wp.z - b.pos.z) < 2 || b.stuckT > 1.2)) {
-        b.wp = b.lastSeen && Math.random() < 0.5 ? b.lastSeen : pickWaypoint(b); b.lastSeen = null; b.stuckT = 0;
+      // los "atacantes" siguen su camino mientras disparan; los demás buscan cómo llegar al enemigo
+      if (t && !b.pusher) b.route = planRoute(b, t.pos) || [];
+      else if (!b.route || !b.route.length || b.stuckT > 1.2) {
+        let route = null;
+        if (b.lastSeen && Math.random() < 0.5) route = planRoute(b, b.lastSeen);
+        if (!route) route = planRoute(b, pickGoal(b));
+        if (!route) route = planRoute(b, baseCenter(b.team));
+        b.route = route || []; b.lastSeen = null; b.stuckT = 0;
       }
       if (Math.random() < 0.12) b.strafeDir *= -1;
       // a veces lanza una canica
@@ -1090,31 +1305,32 @@
       desiredPitch = -Math.atan2(ch.y - eye.y, d);
       const ideal = b.wdef.ideal;
       const fwd = d > ideal + 3 ? 1 : d < ideal - 3 ? -0.6 : 0;
-      const nx = dx / d, nz = dz / d;
-      mx = nx * fwd + nz * b.strafeDir * 0.75; mz = nz * fwd - nx * b.strafeDir * 0.75;
+      const nx = dx / d, nz = dz / d, stx = nz * b.strafeDir * 0.75, stz = -nx * b.strafeDir * 0.75;
+      const rd = routeDir(b);
+      if (rd && (b.pusher || fwd > 0)) { mx = rd[0] + stx * 0.35; mz = rd[1] + stz * 0.35; }
+      else { mx = nx * fwd + stx; mz = nz * fwd + stz; }
       // disparar
       if (b.reloadT > 0) { b.reloadT -= dt; if (b.reloadT <= 0) b.ammo = b.wdef.mag; }
       else if (b.seenT > sk.reaction && Math.abs(angDiff(b.yaw, desiredYaw)) < 0.25 && gameTime >= b.nextShot && b.spawnProt <= 0) botFire(b, t);
     } else {
       b.target = null;
-      if (b.wp) {
-        const dx = b.wp.x - b.pos.x, dz = b.wp.z - b.pos.z, d = Math.hypot(dx, dz) || 1;
-        mx = dx / d; mz = dz / d; desiredYaw = Math.atan2(dx, dz);
-      }
+      const rd = routeDir(b);
+      if (rd) { mx = rd[0]; mz = rd[1]; desiredYaw = Math.atan2(mx, mz); }
       if (b.alertT > 0 && b.alertFrom) desiredYaw = Math.atan2(b.alertFrom.pos.x - b.pos.x, b.alertFrom.pos.z - b.pos.z);
       if (b.ammo < b.wdef.mag && b.reloadT <= 0) b.reloadT = b.wdef.reload;
       if (b.reloadT > 0) { b.reloadT -= dt; if (b.reloadT <= 0) b.ammo = b.wdef.mag; }
     }
-    const len = Math.hypot(mx, mz); if (len > 1) { mx /= len; mz /= len; }
+    let len = Math.hypot(mx, mz); if (len > 1) { mx /= len; mz /= len; }
+    [mx, mz] = safeMove(b, mx, mz);
+    len = Math.hypot(mx, mz);
     const speed = 5.2;
     const k = Math.min(1, 10 * dt);
     b.vel.x += (mx * speed - b.vel.x) * k; b.vel.z += (mz * speed - b.vel.z) * k;
     if (b.blocked && b.onGround) b.vel.y = 8.3;
     const before = b.pos.clone();
     moveBody(b, dt);
-    b.pos.x = clamp(b.pos.x, -BOT_X, BOT_X); b.pos.z = clamp(b.pos.z, -BOT_Z, BOT_Z);
     if (len > 0.3 && Math.hypot(b.pos.x - before.x, b.pos.z - before.z) < speed * dt * 0.3) b.stuckT = (b.stuckT || 0) + dt; else b.stuckT = 0;
-    if (b.pos.y < -5) { respawn(b); return; }
+    if (b.pos.y < -8) { kill(b, null, 'fall'); return; }
     b.yaw += clamp(angDiff(b.yaw, desiredYaw), -sk.turn * dt, sk.turn * dt);
     b.pitch += (desiredPitch - b.pitch) * Math.min(1, 8 * dt);
     b.mesh.position.copyFrom(b.pos);
@@ -1149,7 +1365,7 @@
   function updateCamera(dt) {
     if (state === 'menu') {
       menuAngle += dt * 0.12;
-      camera.position.set(Math.sin(menuAngle) * 58, 24, Math.cos(menuAngle) * 46);
+      camera.position.set(Math.sin(menuAngle) * 92, 42, Math.cos(menuAngle) * 92);
       camera.setTarget(new V3(0, 1, 0));
       vms.forEach((v) => v.setEnabled(false));
       if (P.mesh) P.mesh.setEnabled(false);
@@ -1216,7 +1432,7 @@
     diff = DIFFS[chosenDiff];
     P.cls = CLASSES[chosenClass]; P.maxHp = P.cls.hp;
     createBots();
-    score[0] = score[1] = 0;
+    score.fill(0);
     projectiles.forEach((p) => giveMesh(p.key, p.mesh)); projectiles.length = 0;
     grenades.forEach((g) => giveMesh('nade', g.mesh)); grenades.length = 0;
     soldiers.forEach((s) => { s.kills = 0; s.deaths = 0; s.alive = false; });
@@ -1254,10 +1470,12 @@
   }
   function endMatch() {
     state = 'over';
-    const won = score[0] >= WIN_SCORE;
-    $('overTitle').textContent = won ? '¡VICTORIA AZUL!' : 'Ganó el equipo Rojo';
-    $('overTitle').style.color = won ? '#3a86ff' : '#ef233c';
-    $('overStats').innerHTML = `Marcador: <b class="blue">${score[0]}</b> – <b class="red">${score[1]}</b><br>Tus eliminaciones: <b>${P.kills}</b> · Veces que caíste: <b>${P.deaths}</b>`;
+    const winner = score.indexOf(Math.max(...score)), won = winner === 0;
+    $('overTitle').textContent = won ? '¡VICTORIA AZUL!' : 'Ganó el equipo ' + TEAM_NAME[winner];
+    $('overTitle').style.color = TEAM_HEX[winner];
+    const order = TEAM_NAME.map((n, t) => t).sort((a, b) => score[b] - score[a]);
+    $('overStats').innerHTML = order.map((t, i) => `${i + 1}º <b style="color:${TEAM_HEX[t]}">${TEAM_NAME[t]}</b> ${score[t]}`).join(' · ') +
+      `<br>Tus eliminaciones: <b>${P.kills}</b> · Veces que caíste: <b>${P.deaths}</b>`;
     ui.over.classList.remove('hidden'); ui.touch.classList.add('hidden');
     sfx(won ? 'win' : 'lose');
     if (won) for (let i = 0; i < 4; i++) confetti(new V3(P.pos.x + rand(-3, 3), P.pos.y + 3, P.pos.z + rand(-3, 3)), 2);
@@ -1398,5 +1616,6 @@
   });
 
   // Para pruebas automáticas
-  window.__pa = { get dbg() { return { mouseDown, touchMode, locked, nextShot: P.nextShot, gameTime, reloadT: P.reloadT, alive: P.alive }; }, scene, P, get bots() { return bots; }, score, get state() { return state; }, startMatch, firePlayer, playerNade };
+  window.__pa = { get dbg() { return { mouseDown, touchMode, locked, nextShot: P.nextShot, gameTime, reloadT: P.reloadT, alive: P.alive }; }, scene, P, get bots() { return bots; }, score, get state() { return state; }, startMatch, firePlayer, playerNade, findRoute, walkable,
+    simulate(sec) { for (let t = 0; t < sec && state === 'playing'; t += 1 / 30) { gameTime += 1 / 30; for (const b of bots) updateBot(b, 1 / 30); updateProjectiles(1 / 30); updateGrenades(1 / 30); } } };
 })();
