@@ -46,6 +46,11 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 10
 #health { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: 16px; width: 220px; height: 22px; background: rgba(20,20,40,.5); border-radius: 12px; overflow: hidden; border: 2px solid rgba(255,255,255,.7); }
 #hpfill { height: 100%; width: 100%; background: linear-gradient(90deg, #38b000, #9ef01a); transition: width .15s; }
 #hpfill.low { background: linear-gradient(90deg, #ff7b00, #ffb700); }
+#hpfill.over { background: linear-gradient(90deg, #ffd23f, #fff3b0); }
+#item { margin-top: 4px; font-size: 15px; color: #ffd23f; background: rgba(20,20,40,.45); border-radius: 8px; padding: 2px 8px; display: inline-block; }
+#shieldfx { position: absolute; inset: 0; opacity: 0; transition: opacity .25s; background: radial-gradient(ellipse at center, transparent 55%, rgba(94,200,255,.55) 100%); }
+#shieldfx.on { opacity: 1; }
+#hitmarker.blocked { color: #5ec8ff; }
 #hptext { position: absolute; inset: 0; text-align: center; font-weight: 800; font-size: 14px; line-height: 18px; }
 #weapon { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: 14px; text-align: right; font-weight: 800; }
 #wname { font-size: 16px; }
@@ -70,6 +75,8 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 10
 #bJump { right: max(18px, env(safe-area-inset-right)); bottom: 110px; }
 #bCrouch { right: max(104px, calc(env(safe-area-inset-right) + 86px)); bottom: 100px; }
 #bNade { right: max(22px, env(safe-area-inset-right)); bottom: 200px; color: #5ec8ff; font-size: 22px; }
+#bItem { right: max(100px, calc(env(safe-area-inset-right) + 82px)); bottom: 245px; font-size: 24px; border-color: #ffd23f; }
+#bItem.empty { opacity: .35; }
 #bReload { right: max(92px, calc(env(safe-area-inset-right) + 74px)); bottom: 172px; font-size: 22px; }
 #bSwap { right: max(22px, env(safe-area-inset-right)); top: 64px; font-size: 12px; }
 body.touch #health { bottom: auto; top: 62px; left: max(12px, env(safe-area-inset-left)); width: 160px; }
