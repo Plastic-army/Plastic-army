@@ -761,11 +761,24 @@
   // ------------------------------------------------------------------
   const keys = {};
   let mouseDown = false, aimDown = false, locked = false, wantsLock = false;
-  let jumpPressed = false;
+  let jumpPressed = false, touchFire = false, editingLayout = false;
   const SENS = 0.0022;
+
+  // ------------------------------------------------------------------
+  // Configuración del jugador (se guarda en este aparato)
+  // ------------------------------------------------------------------
+  const CFG_KEY = 'plasticArmy.settings.v1';
+  const CFG_DEFAULT = { sens: 1, cam: 'first', fire: 'auto', layout: {} };
+  const cfg = (() => {
+    try { return Object.assign({}, CFG_DEFAULT, JSON.parse(localStorage.getItem(CFG_KEY) || '{}')); } catch (e) { return Object.assign({}, CFG_DEFAULT); }
+  })();
+  if (!cfg.layout || typeof cfg.layout !== 'object') cfg.layout = {};
+  function saveCfg() { try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (e) { /* sin guardado */ } }
 
   addEventListener('keydown', (e) => {
     keys[e.code] = true;
+    if (e.code === 'Escape' && editingLayout) { endLayoutEdit(); return; }
+    if (e.code === 'Escape' && !settingsUI.classList.contains('hidden')) { closeSettings(); return; }
     if (state !== 'playing') return;
     if (e.code === 'Space') { jumpPressed = true; e.preventDefault(); }
     if (e.code === 'KeyR') startReload();
@@ -798,7 +811,7 @@
   addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse' || state !== 'playing' || touchMode) return;
     if ((locked || e.buttons) && Math.abs(e.movementX) < 250 && Math.abs(e.movementY) < 250) {
-      const s = SENS * (aimDown && WEAPONS[P.wi].zoom ? 0.4 : aimDown ? 0.75 : 1);
+      const s = SENS * cfg.sens * (aimDown && WEAPONS[P.wi].zoom ? 0.4 : aimDown ? 0.75 : 1);
       P.yaw += e.movementX * s; P.pitch = clamp(P.pitch + e.movementY * s, -1.45, 1.45);
     }
   });
@@ -837,6 +850,7 @@
   touchLayer.addEventListener('touchstart', (e) => {
     if (e.target.classList.contains('tbtn')) return;
     e.preventDefault();
+    if (editingLayout) return;
     for (const t of e.changedTouches) {
       const side = t.clientX < innerWidth * 0.5 ? 'L' : 'R';
       const s = sticks[side];
@@ -868,13 +882,19 @@
   };
   touchLayer.addEventListener('touchend', endTouch);
   touchLayer.addEventListener('touchcancel', endTouch);
-  const tbtn = (id, fn) => $(id).addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); initAudio(); if (state === 'playing') fn(); }, { passive: false });
+  const tbtn = (id, fn) => $(id).addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); initAudio(); if (state === 'playing' && !editingLayout) fn(); }, { passive: false });
   tbtn('bJump', () => (jumpPressed = true));
   tbtn('bNade', () => playerNade());
   tbtn('bSwap', () => switchWeapon((P.wi + 1) % 3));
   tbtn('bReload', () => startReload());
   tbtn('bCrouch', () => { P.crouchToggle = !P.crouchToggle; $('bCrouch').classList.toggle('on', P.crouchToggle); });
   tbtn('bPause', () => pauseGame());
+  // Botón de disparo (modo manual): dispara mientras lo mantienes apretado
+  const bFire = $('bFire');
+  bFire.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); initAudio(); if (state === 'playing' && !editingLayout) { touchFire = true; bFire.classList.add('on'); } }, { passive: false });
+  const fireUp = (e) => { e.preventDefault(); touchFire = false; bFire.classList.remove('on'); };
+  bFire.addEventListener('touchend', fireUp, { passive: false });
+  bFire.addEventListener('touchcancel', fireUp, { passive: false });
 
   // ------------------------------------------------------------------
   // Jugador: movimiento y disparo
@@ -918,10 +938,12 @@
     const far = f.scale(def.range);
     // punto al que apunta el centro de la pantalla
     let t = segWorld(eye, far);
+    if (thirdPerson()) t = Math.max(t, camBack / def.range); // no apuntar a lo que hay entre la cámara y tu soldadito
     for (const s of soldiers) { if (s.alive && s.team !== P.team) { const ts = segSoldier(eye, far, s); if (ts >= 0 && ts < t) t = ts; } }
     const aimPt = eye.add(far.scale(Math.max(t, 0.02)));
     const right = new V3(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
-    const origin = eye.add(f.scale(0.35)).add(right.scale(0.14)).add(new V3(0, -0.1, 0));
+    const gunEye = thirdPerson() ? headPos() : eye;
+    const origin = gunEye.add(f.scale(0.35)).add(right.scale(0.14)).add(new V3(0, -0.1, 0));
     const base = aimPt.subtract(origin).normalize();
     const moving = Math.hypot(P.vel.x, P.vel.z) > 1 ? 1.6 : 1;
     let spread = def.spread * moving * (P.onGround ? 1 : 2) * (P.crouch ? 0.7 : 1) * (aimDown ? 0.5 : 1);
@@ -960,8 +982,8 @@
         const curve = (v) => Math.sign(v) * Math.pow(Math.abs(v), 1.7);
         const slow = hud.cross.classList.contains('on') ? 0.45 : 1; // ayuda: más lento sobre un enemigo
         const zoom = aimDown && WEAPONS[P.wi].zoom ? 0.4 : 1;
-        P.yaw += curve(rx) * 3.4 * slow * zoom * dt;
-        P.pitch = clamp(P.pitch + curve(ry) * 2.2 * slow * zoom * dt, -1.45, 1.45);
+        P.yaw += curve(rx) * 3.4 * cfg.sens * slow * zoom * dt;
+        P.pitch = clamp(P.pitch + curve(ry) * 2.2 * cfg.sens * slow * zoom * dt, -1.45, 1.45);
       }
     }
     const len = Math.hypot(mx, mz); if (len > 1) { mx /= len; mz /= len; }
@@ -993,7 +1015,7 @@
     if (touchMode) {
       const onTarget = enemyInSights(def.range * 0.8);
       hud.cross.classList.toggle('on', onTarget);
-      firing = firing || onTarget;
+      firing = firing || (cfg.fire === 'manual' ? touchFire : onTarget);
     }
     if (firing) firePlayer();
     updateHud();
@@ -1121,13 +1143,16 @@
   // ------------------------------------------------------------------
   // Cámara y arma en pantalla
   // ------------------------------------------------------------------
-  let menuAngle = 0;
+  let menuAngle = 0, camBack = 0;
+  const thirdPerson = () => cfg.cam === 'third' && state !== 'menu';
+  const headPos = () => new V3(P.pos.x, P.pos.y + P.eyeH, P.pos.z);
   function updateCamera(dt) {
     if (state === 'menu') {
       menuAngle += dt * 0.12;
       camera.position.set(Math.sin(menuAngle) * 58, 24, Math.cos(menuAngle) * 46);
       camera.setTarget(new V3(0, 1, 0));
       vms.forEach((v) => v.setEnabled(false));
+      if (P.mesh) P.mesh.setEnabled(false);
       return;
     }
     camera.rotationQuaternion = null;
@@ -1136,15 +1161,31 @@
     const sp = Math.hypot(P.vel.x, P.vel.z);
     if (P.onGround && sp > 1) P.bobT += dt * sp * 1.5;
     let ex = P.pos.x, ey = P.pos.y + P.eyeH + Math.sin(P.bobT * 2) * 0.035 * Math.min(1, sp / 6), ez = P.pos.z;
-    if (!P.alive) ey = P.pos.y + 0.5;
+    if (!P.alive && !thirdPerson()) ey = P.pos.y + 0.5;
     if (shake > 0) { ex += rand(-shake, shake) * 0.3; ey += rand(-shake, shake) * 0.3; shake = Math.max(0, shake - dt); }
+    camBack = 0;
+    if (thirdPerson()) {
+      // Cámara más lejos: detrás y un poco a la derecha del soldadito, sin atravesar paredes
+      const f = forwardVec(), right = new V3(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
+      const head = new V3(ex, ey, ez);
+      const off = f.scale(-3.3).add(right.scale(0.75)).add(new V3(0, 0.45, 0));
+      const t = Math.max(0.12, segWorld(head, off) - 0.08);
+      ex += off.x * t; ey += off.y * t; ez += off.z * t;
+      camBack = off.length() * t;
+    }
     camera.position.set(ex, ey, ez);
-    camera.rotation.set(P.pitch, P.yaw, P.alive ? 0 : 0.5);
+    camera.rotation.set(P.pitch, P.yaw, P.alive || thirdPerson() ? 0 : 0.5);
+    if (P.mesh) {
+      P.mesh.setEnabled(thirdPerson() && (P.alive || P.deathT > 1.4));
+      P.mesh.position.copyFrom(P.pos);
+      P.mesh.rotation.set(P.alive ? 0 : -Math.min(1, (3 - P.deathT) / 0.35) * Math.PI / 2, P.yaw, 0);
+      P.mesh.scaling.y = P.h / H;
+    }
     const def = WEAPONS[P.wi];
     const fovT = aimDown ? (def.zoom ? 0.5 : 0.95) : 1.15;
     camera.fov += (fovT - camera.fov) * Math.min(1, 12 * dt);
     // arma
-    vms.forEach((v, i) => v.setEnabled(i === P.wi && P.alive && !(aimDown && def.zoom && camera.fov < 0.7)));
+    vms.forEach((v, i) => v.setEnabled(!thirdPerson() && i === P.wi && P.alive && !(aimDown && def.zoom && camera.fov < 0.7)));
     vmKick = Math.max(0, vmKick - dt * 8); vmSwap = Math.max(0, vmSwap - dt * 5);
     const reloadDip = P.reloadT > 0 ? Math.sin(Math.min(1, 1 - P.reloadT / (def.reload * P.cls.reloadMul)) * Math.PI) : 0;
     vmRoot.position.set(
@@ -1232,6 +1273,89 @@
   $('again').addEventListener('click', startMatch);
   $('toMenu').addEventListener('click', toMenu);
 
+  // ------------------------------------------------------------------
+  // Menú de configuración (tuerca) y botones que se pueden mover
+  // ------------------------------------------------------------------
+  const MOVABLE = ['bPause', 'bSwap', 'bReload', 'bNade', 'bCrouch', 'bJump', 'bFire'];
+  const settingsUI = $('settings');
+  let settingsFromPlay = false;
+  function applyLayout() {
+    for (const id of MOVABLE) {
+      const el = $(id), p = cfg.layout[id];
+      if (p) Object.assign(el.style, { left: (p.x * 100) + '%', top: (p.y * 100) + '%', right: 'auto', bottom: 'auto', transform: 'translate(-50%,-50%)' });
+      else Object.assign(el.style, { left: '', top: '', right: '', bottom: '', transform: '' });
+    }
+  }
+  function applySettings() {
+    cfg.sens = Math.round(clamp(+cfg.sens || 1, 0.2, 3) * 10) / 10;
+    $('sensVal').textContent = cfg.sens.toFixed(1);
+    $('sensRange').value = cfg.sens;
+    [...$('camChoices').children].forEach((b) => b.classList.toggle('sel', b.dataset.cam === cfg.cam));
+    [...$('fireChoices').children].forEach((b) => b.classList.toggle('sel', b.dataset.fire === cfg.fire));
+    document.body.classList.toggle('fire-manual', cfg.fire === 'manual');
+    if (cfg.fire !== 'manual') { touchFire = false; $('bFire').classList.remove('on'); }
+    applyLayout();
+  }
+  const setSens = (v) => { cfg.sens = v; applySettings(); saveCfg(); };
+  $('sensMinus').addEventListener('click', () => setSens(cfg.sens - 0.1));
+  $('sensPlus').addEventListener('click', () => setSens(cfg.sens + 0.1));
+  $('sensRange').addEventListener('input', (e) => setSens(+e.target.value));
+  choose($('camChoices'), 'cam', (v) => { cfg.cam = v; applySettings(); saveCfg(); });
+  choose($('fireChoices'), 'fire', (v) => { cfg.fire = v; applySettings(); saveCfg(); });
+  function openSettings() {
+    settingsFromPlay = state === 'playing';
+    if (settingsFromPlay) pauseGame();
+    if (document.pointerLockElement) document.exitPointerLock();
+    applySettings();
+    settingsUI.classList.remove('hidden'); document.body.classList.add('settings-open');
+  }
+  function closeSettings() {
+    settingsUI.classList.add('hidden'); document.body.classList.remove('settings-open');
+    if (settingsFromPlay && state === 'paused') { initAudio(); resume(); }
+    settingsFromPlay = false;
+  }
+  $('gear').addEventListener('click', (e) => { e.stopPropagation(); openSettings(); });
+  $('pauseSettings').addEventListener('click', openSettings);
+  $('settingsDone').addEventListener('click', closeSettings);
+  // Reacomodar botones: se arrastran con el dedo (o el ratón) y se guardan como porcentaje de la pantalla
+  function startLayoutEdit() {
+    editingLayout = true; touchFire = false;
+    for (const k of ['L', 'R']) { const st = sticks[k]; st.id = null; st.x = st.y = 0; st.el.classList.remove('on'); }
+    document.body.classList.add('editing-layout'); $('layoutBar').classList.remove('hidden');
+  }
+  function endLayoutEdit() {
+    editingLayout = false; saveCfg();
+    document.body.classList.remove('editing-layout'); $('layoutBar').classList.add('hidden');
+  }
+  const resetLayout = () => { cfg.layout = {}; applyLayout(); saveCfg(); };
+  $('editLayout').addEventListener('click', startLayoutEdit);
+  $('resetLayout').addEventListener('click', () => { resetLayout(); showBanner('Botones restablecidos'); });
+  $('layoutReset').addEventListener('click', resetLayout);
+  $('layoutDone').addEventListener('click', endLayoutEdit);
+  let drag = null;
+  for (const id of MOVABLE) {
+    const el = $(id);
+    el.addEventListener('pointerdown', (e) => {
+      if (!editingLayout) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      drag = { el, id, pid: e.pointerId, dx: e.clientX - (r.left + r.width / 2), dy: e.clientY - (r.top + r.height / 2), w: r.width, h: r.height };
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* sin captura */ }
+      el.classList.add('dragging');
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!drag || drag.el !== el || e.pointerId !== drag.pid) return;
+      const cx = clamp(e.clientX - drag.dx, drag.w / 2, innerWidth - drag.w / 2);
+      const cy = clamp(e.clientY - drag.dy, drag.h / 2, innerHeight - drag.h / 2);
+      cfg.layout[id] = { x: cx / innerWidth, y: cy / innerHeight };
+      applyLayout();
+    });
+    const drop = (e) => { if (drag && drag.el === el && e.pointerId === drag.pid) { el.classList.remove('dragging'); drag = null; saveCfg(); } };
+    el.addEventListener('pointerup', drop);
+    el.addEventListener('pointercancel', drop);
+  }
+  applySettings();
+
   // Instalar como app (PWA)
   let installEvt = null;
   addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; $('install').classList.remove('hidden'); });
@@ -1245,6 +1369,7 @@
   buildWorld();
   buildProjMasters();
   buildViewmodels();
+  P.mesh = makeSoldierMesh('Tú', '#5aa2ff'); P.mesh.setEnabled(false);
   createBots();
   soldiers.forEach((s) => respawn(s));
 

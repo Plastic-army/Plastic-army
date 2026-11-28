@@ -46,6 +46,17 @@
     <button class="tbtn" id="bNade">●</button>
     <button class="tbtn" id="bCrouch">▼</button>
     <button class="tbtn big" id="bJump">▲</button>
+    <button class="tbtn big" id="bFire">🎯</button>
+  </div>
+
+  <!-- Botón de configuración (tuerca) -->
+  <button id="gear" aria-label="Configuración" title="Configuración">⚙</button>
+
+  <!-- Barra para reacomodar los botones táctiles -->
+  <div id="layoutBar" class="hidden">
+    <span>Arrastra los botones adonde te queden cómodos</span>
+    <button id="layoutReset">Restablecer</button>
+    <button id="layoutDone" class="ok">Listo</button>
   </div>
 
   <!-- Menú principal -->
@@ -82,7 +93,46 @@
     <div class="panel">
       <h2>Pausa</h2>
       <button id="resume" class="cta">Continuar</button>
+      <button id="pauseSettings" class="small">⚙ Configuración</button>
       <button id="quit" class="small">Volver al menú</button>
+    </div>
+  </div>
+
+  <div id="settings" class="overlay hidden">
+    <div class="panel">
+      <h2>⚙ Configuración</h2>
+      <div class="group">
+        <div class="label">Sensibilidad de la mira</div>
+        <div class="stepper">
+          <button id="sensMinus" aria-label="Menos sensibilidad">−</button>
+          <input id="sensRange" type="range" min="0.2" max="3" step="0.1" value="1">
+          <button id="sensPlus" aria-label="Más sensibilidad">+</button>
+          <b id="sensVal">1.0</b>
+        </div>
+      </div>
+      <div class="group">
+        <div class="label">Cámara</div>
+        <div class="choices" id="camChoices">
+          <button data-cam="first">Primera persona<small>Ves desde los ojos</small></button>
+          <button data-cam="third">Tercera persona<small>Cámara más lejos, ves a tu soldadito</small></button>
+        </div>
+      </div>
+      <div class="group">
+        <div class="label">Disparo en celular y tablet</div>
+        <div class="choices" id="fireChoices">
+          <button data-fire="auto">Automático<small>Dispara solo al apuntar a un enemigo</small></button>
+          <button data-fire="manual">Manual<small>Aparece un botón 🎯 para disparar</small></button>
+        </div>
+        <p class="help pc-only">En la compu siempre disparas con el clic del ratón.</p>
+      </div>
+      <div class="group">
+        <div class="label">Botones de la pantalla</div>
+        <div class="choices">
+          <button id="editLayout">✥ Mover botones<small>Arrástralos a tu gusto</small></button>
+          <button id="resetLayout">↺ Restablecer<small>Volver a como estaban</small></button>
+        </div>
+      </div>
+      <button id="settingsDone" class="cta">Listo</button>
     </div>
   </div>
 
