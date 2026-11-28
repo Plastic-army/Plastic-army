@@ -1844,6 +1844,7 @@
   createBots();
   soldiers.forEach((s) => respawn(s));
 
+  let framesDrawn = 0;
   engine.runRenderLoop(() => {
     const dt = Math.min(engine.getDeltaTime() / 1000, 0.05);
     if (state === 'playing') {
@@ -1867,6 +1868,7 @@
     if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) hud.banner.classList.remove('show'); }
     updateCamera(dt);
     scene.render();
+    if (++framesDrawn === 3 && window.__paReady) window.__paReady(); // avisa a la pantalla de carga
   });
 
   // Para pruebas automáticas
