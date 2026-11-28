@@ -1591,16 +1591,31 @@
   // ------------------------------------------------------------------
   // Cámara y arma en pantalla
   // ------------------------------------------------------------------
-  let menuAngle = 0, camBack = 0;
+  let camBack = 0, lobbySpin = Math.PI * 0.15, lobbyDrag = null;
+  const LOBBY_STAGE = { x: 0, y: 0.05, z: 15 };
+  canvas.addEventListener('pointerdown', (e) => { if (state === 'menu') lobbyDrag = { x: e.clientX, id: e.pointerId }; });
+  addEventListener('pointermove', (e) => {
+    if (state !== 'menu' || !lobbyDrag || e.pointerId !== lobbyDrag.id) return;
+    lobbySpin += (e.clientX - lobbyDrag.x) * 0.012; lobbyDrag.x = e.clientX;
+  });
+  const lobbyUp = (e) => { if (lobbyDrag && e.pointerId === lobbyDrag.id) lobbyDrag = null; };
+  addEventListener('pointerup', lobbyUp); addEventListener('pointercancel', lobbyUp);
   const thirdPerson = () => cfg.cam === 'third' && state !== 'menu';
   const headPos = () => new V3(P.pos.x, P.pos.y + P.eyeH, P.pos.z);
   function updateCamera(dt) {
     if (state === 'menu') {
-      menuAngle += dt * 0.12;
-      camera.position.set(Math.sin(menuAngle) * 135, 62, Math.cos(menuAngle) * 135);
-      camera.setTarget(new V3(0, 1, 0));
+      // Lobby: tu soldadito al centro, girando despacio (se puede girar arrastrando)
+      if (!lobbyDrag) lobbySpin += dt * 0.5;
+      const st = LOBBY_STAGE;
+      camera.rotationQuaternion = null; camera.fov = 0.8;
+      camera.position.set(st.x, st.y + 1.15, st.z - 4.6);
+      camera.setTarget(new V3(st.x, st.y + 0.95, st.z));
       vms.forEach((v) => v.setEnabled(false));
-      if (P.mesh) P.mesh.setEnabled(false);
+      if (P.mesh) {
+        P.mesh.setEnabled(true);
+        P.mesh.position.set(st.x, st.y, st.z);
+        P.mesh.rotation.set(0, lobbySpin, 0); P.mesh.scaling.y = 1;
+      }
       return;
     }
     camera.rotationQuaternion = null;
@@ -1651,13 +1666,23 @@
   // Estados: menú, jugando, pausa, fin
   // ------------------------------------------------------------------
   const ui = { menu: $('menu'), pause: $('pause'), over: $('over'), hud: $('hud'), touch: touchLayer, rotate: $('rotate') };
-  let chosenClass = 'fusilero', chosenDiff = 'normal';
+  let chosenClass = CLASSES[cfg.cls] ? cfg.cls : 'fusilero', chosenDiff = DIFFS[cfg.diff] ? cfg.diff : 'normal';
   const choose = (wrap, attr, cb) => wrap.addEventListener('click', (e) => {
     const btn = e.target.closest('button'); if (!btn) return;
     [...wrap.children].forEach((b) => b.classList.toggle('sel', b === btn)); cb(btn.dataset[attr]);
   });
-  choose($('classChoices'), 'class', (v) => (chosenClass = v));
-  choose($('diffChoices'), 'diff', (v) => (chosenDiff = v));
+  const markSel = (wrap, attr, v) => [...wrap.children].forEach((b) => b.classList.toggle('sel', b.dataset[attr] === v));
+  markSel($('classChoices'), 'class', chosenClass); markSel($('diffChoices'), 'diff', chosenDiff);
+  choose($('classChoices'), 'class', (v) => { chosenClass = cfg.cls = v; saveCfg(); });
+  choose($('diffChoices'), 'diff', (v) => { chosenDiff = cfg.diff = v; saveCfg(); });
+  // Pestañas del lobby: Inicio, Tienda, Misiones
+  const TAB_IDS = { inicio: 'tabInicio', tienda: 'tabTienda', misiones: 'tabMisiones' };
+  function showTab(name) {
+    ui.menu.dataset.tab = name;
+    [...$('tabs').children].forEach((b) => b.classList.toggle('sel', b.dataset.tab === name));
+    for (const k in TAB_IDS) $(TAB_IDS[k]).classList.toggle('hidden', k !== name);
+  }
+  $('tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { initAudio(); sfx('swap'); showTab(b.dataset.tab); } });
 
   function startMatch() {
     initAudio();
@@ -1699,6 +1724,7 @@
     state = 'menu';
     ui.pause.classList.add('hidden'); ui.over.classList.add('hidden'); ui.hud.classList.add('hidden'); ui.touch.classList.add('hidden');
     ui.menu.classList.remove('hidden'); document.body.classList.remove('playing');
+    showTab('inicio');
     checkRotate();
   }
   function endMatch() {
@@ -1758,6 +1784,7 @@
     if (settingsFromPlay) pauseGame();
     if (document.pointerLockElement) document.exitPointerLock();
     applySettings();
+    $('classNote').textContent = settingsFromPlay ? 'Si cambias la clase o la dificultad, se usa en la próxima partida.' : '';
     settingsUI.classList.remove('hidden'); document.body.classList.add('settings-open');
   }
   function closeSettings() {
