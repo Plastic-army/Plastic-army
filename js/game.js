@@ -56,10 +56,10 @@
   // Colores de cine: curva de tonos que respeta los colores de juguete, un poco más de contraste y viñeta suave
   const ipc = scene.imageProcessingConfiguration;
   ipc.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_KHR_PBR_NEUTRAL;
-  ipc.exposure = 0.96; ipc.contrast = 1.28;
+  ipc.exposure = 1.1; ipc.contrast = 1.15;
   ipc.colorCurvesEnabled = true;
-  ipc.colorCurves = new BABYLON.ColorCurves(); ipc.colorCurves.globalSaturation = 28;
-  ipc.vignetteWeight = 1.6; ipc.vignetteStretch = 0.4; ipc.vignetteColor = new C4(0.05, 0.08, 0.15, 0);
+  ipc.colorCurves = new BABYLON.ColorCurves(); ipc.colorCurves.globalSaturation = 22;
+  ipc.vignetteWeight = 0.7; ipc.vignetteStretch = 0.4; ipc.vignetteColor = new C4(0.05, 0.08, 0.15, 0);
   ipc.vignetteCameraFov = 1.15;
 
   // Cielo: degradé de azul fuerte arriba a celeste claro en el horizonte, con un sol que brilla
@@ -67,7 +67,7 @@
   {
     const c = skyTex.getContext(), g = c.createLinearGradient(0, 0, 0, 512);
     // (en la esfera el dibujo queda al revés: abajo del lienzo = arriba del cielo)
-    g.addColorStop(1, '#2a74d8'); g.addColorStop(0.75, '#4f9cec'); g.addColorStop(0.56, '#a9d4fb'); g.addColorStop(0.5, '#d6ecff'); g.addColorStop(0, '#bcd9ee');
+    g.addColorStop(1, '#3a86e6'); g.addColorStop(0.75, '#62aaf2'); g.addColorStop(0.56, '#a9d4fb'); g.addColorStop(0.5, '#d6ecff'); g.addColorStop(0, '#bcd9ee');
     c.fillStyle = g; c.fillRect(0, 0, 4, 512); skyTex.update();
   }
   skyTex.wrapU = skyTex.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
