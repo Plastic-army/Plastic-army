@@ -1,6 +1,6 @@
 # Plastic Army 🪖
 
-Soldaditos de juguete peleando en un jardín gigante, cuatro equipos y cuatro mesas. Shooter en primera persona que se juega en el navegador (PC y celular) y se puede instalar como app.
+Soldaditos de juguete peleando por equipos en un jardín gigante, o todos contra todos en la Plaza y en la Casa. Shooter en primera persona que se juega en el navegador (PC y celular) y se puede instalar como app.
 
 **Jugar:** https://plastic-army.github.io/Plastic-army/ (cuando GitHub Pages esté activado)
 
@@ -14,12 +14,19 @@ Soldaditos de juguete peleando en un jardín gigante, cuatro equipos y cuatro me
 - Controles de PC (WASD + ratón) y de celular (dos joysticks, disparo automático al apuntar a un enemigo).
 - Instalable (PWA) y funciona sin internet después de abrirlo una vez.
 
+## Batalla campal (todos contra todos)
+- En **Inicio**, arriba de INICIAR, está **Elegir modo**: *Por equipos* (Jardín) o *Batalla campal*. Al tocar Batalla campal se abre **Elegir mapa** con la foto de cada mapa.
+- **Plaza**: al aire libre con pasto, fuente, juegos, arenero, glorieta y setos. 16 jugadores (tú + 15 bots). Caes desde el cielo en un lugar al azar.
+- **Casa**: casa grande de 2 pisos (cocina, living, comedor, cuarto de juegos y dormitorios arriba, con dos escaleras) y un patio con cerca. 12 jugadores.
+- Todos empiezan con la **pistolita de bolitas** en un lugar al azar. Hay armas (rifle, escopeta, lanzadardos) y bolsitas de canicas tiradas por el mapa: se agarran solas al pasar por encima. Si alguien cae, suelta su arma. Las armas del piso vuelven a aparecer en otro lugar 22 s después.
+- No se vuelve a aparecer: gana el último soldadito en pie.
+
 ## Controles
 | PC | Celular |
 |---|---|
 | WASD moverse · Shift correr · Espacio saltar · C agacharse | Joystick izquierdo: moverse |
 | Ratón apuntar · Clic disparar · Clic derecho mirilla | Joystick derecho: apuntar (dispara solo) |
-| 1 / 2 / 3 o rueda: cambiar arma · R recargar · G canica | Botones: ARMA, ↻ recargar, ● canica, ▲ saltar, ▼ agacharse |
+| 1 / 2 / 3 / 4 o rueda: cambiar arma · R recargar · G canica | Botones: ARMA, ↻ recargar, ● canica, ▲ saltar, ▼ agacharse |
 | Esc pausa | II pausa |
 
 ## Para desarrolladores
