@@ -63,34 +63,21 @@
     <button id="layoutDone" class="ok">Listo</button>
   </div>
 
-  <!-- Menú principal -->
-  <div id="menu" class="overlay">
-    <div class="panel">
-      <h1>PLASTIC <span>ARMY</span></h1>
-      <p class="sub">Batalla en el Jardín · 4 equipos · prototipo</p>
-      <div class="group">
-        <div class="label">Elige tu clase</div>
-        <div class="choices" id="classChoices">
-          <button data-class="fusilero" class="sel">Fusilero<small>Equilibrado, recarga rápido</small></button>
-          <button data-class="escudero">Escudero<small>Más vida, más lento</small></button>
-          <button data-class="explorador">Explorador<small>Rápido, salta alto</small></button>
-          <button data-class="ingeniero">Ingeniero<small>Lleva 4 canicas</small></button>
-        </div>
-      </div>
-      <div class="group">
-        <div class="label">Dificultad</div>
-        <div class="choices" id="diffChoices">
-          <button data-diff="facil">Fácil<small>Enemigos tranquilos</small></button>
-          <button data-diff="normal" class="sel">Normal<small>Enemigos atentos</small></button>
-          <button data-diff="dificil">Difícil<small>Enemigos expertos</small></button>
-        </div>
-      </div>
-      <button id="play" class="cta">¡JUGAR!</button>
-      <p class="help pc-only">WASD moverse · Ratón apuntar · Clic disparar · Clic derecho mirilla · 1/2/3 o rueda cambiar arma · R recargar · G canica · F usar caja (escudo o mega granada) · Espacio saltar · Shift correr · C agacharse · Esc pausa</p>
-      <p class="help touch-only">Joystick izquierdo: moverte · Joystick derecho: apuntar. ¡Disparas solo cuando la mira toca a un enemigo!</p>
-      <p class="help">4 equipos de 8: <b class="blue">AZUL</b> (el tuyo), <b class="red">ROJO</b>, <b class="green">VERDE</b> y <b class="yellow">AMARILLO</b>. Las mesas están al norte, sur, este y oeste; cada una tiene un puente directo a la mesa redonda del medio y puentes a las bases vecinas. Atento al aviso de arriba: 3 veces por partida aparece una caja sorpresa en la mesa del centro (escudo, mega granada o 200 de vida). El primer equipo en llegar a <b>50</b> eliminaciones gana. ¡Cuidado con caerte al pasto!</p>
-      <button id="install" class="small hidden">Instalar el juego</button>
+  <!-- Menú principal (lobby con pestañas) -->
+  <div id="menu" class="lobby" data-tab="inicio">
+    <div id="topbar">
+      <div class="logo">PLASTIC <span>ARMY</span></div>
+      <nav id="tabs">
+        <button data-tab="inicio" class="sel">Inicio</button>
+        <button data-tab="tienda">Tienda</button>
+        <button data-tab="misiones">Misiones</button>
+      </nav>
     </div>
+    <section id="tabInicio" class="tabpage">
+      <button id="play" class="start">INICIAR</button>
+    </section>
+    <section id="tabTienda" class="tabpage blue hidden"><div class="na">No disponible</div></section>
+    <section id="tabMisiones" class="tabpage blue hidden"><div class="na">No disponible</div></section>
   </div>
 
   <div id="pause" class="overlay hidden">
@@ -105,6 +92,24 @@
   <div id="settings" class="overlay hidden">
     <div class="panel">
       <h2>⚙ Configuración</h2>
+      <div class="group">
+        <div class="label">Tu soldado (clase)</div>
+        <div class="choices" id="classChoices">
+          <button data-class="fusilero" class="sel">Fusilero<small>Equilibrado, recarga rápido</small></button>
+          <button data-class="escudero">Escudero<small>Más vida, más lento</small></button>
+          <button data-class="explorador">Explorador<small>Rápido, salta alto</small></button>
+          <button data-class="ingeniero">Ingeniero<small>Lleva 4 canicas</small></button>
+        </div>
+        <p class="help" id="classNote"></p>
+      </div>
+      <div class="group">
+        <div class="label">Dificultad de los enemigos</div>
+        <div class="choices" id="diffChoices">
+          <button data-diff="facil">Fácil<small>Enemigos tranquilos</small></button>
+          <button data-diff="normal" class="sel">Normal<small>Enemigos atentos</small></button>
+          <button data-diff="dificil">Difícil<small>Enemigos expertos</small></button>
+        </div>
+      </div>
       <div class="group">
         <div class="label">Sensibilidad de la mira</div>
         <div class="stepper">
@@ -136,6 +141,13 @@
           <button id="resetLayout">↺ Restablecer<small>Volver a como estaban</small></button>
         </div>
       </div>
+      <div class="group">
+        <div class="label">Cómo se juega</div>
+        <p class="help pc-only">WASD moverse · Ratón apuntar · Clic disparar · Clic derecho mirilla · 1/2/3 o rueda cambiar arma · R recargar · G canica · F usar caja (escudo o mega granada) · Espacio saltar · Shift correr · C agacharse · Esc pausa</p>
+        <p class="help touch-only">Joystick izquierdo: moverte · Joystick derecho: apuntar. ¡Disparas solo cuando la mira toca a un enemigo!</p>
+        <p class="help">4 equipos de 8: <b class="blue">AZUL</b> (el tuyo), <b class="red">ROJO</b>, <b class="green">VERDE</b> y <b class="yellow">AMARILLO</b>. 3 veces por partida aparece una caja sorpresa en la mesa del centro. El primer equipo en llegar a <b>50</b> eliminaciones gana. ¡Cuidado con caerte al pasto!</p>
+      </div>
+      <button id="install" class="small hidden">Instalar el juego</button>
       <button id="settingsDone" class="cta">Listo</button>
     </div>
   </div>
