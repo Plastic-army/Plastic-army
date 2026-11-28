@@ -58,6 +58,9 @@
     { id: 'shotgun', name: 'Escopeta de corchos', mag: 6, rate: 1.4, dmg: 12, pellets: 8, spread: 0.075, speed: 70, gravity: 7, range: 30, reload: 2.0, kick: 0.05, proj: 'cork', sound: 'shotgun', ideal: 7 },
     { id: 'dart', name: 'Lanzadardos', mag: 5, rate: 1.3, dmg: 70, pellets: 1, spread: 0.002, speed: 150, gravity: 1.5, range: 140, reload: 2.2, kick: 0.04, proj: 'dart', sound: 'dart', zoom: true, ideal: 26 }
   ];
+  // En la Batalla campal todos empiezan con esta pistolita y buscan las otras armas tiradas en el mapa
+  const PISTOL = { id: 'pistol', name: 'Pistolita de bolitas', mag: 12, rate: 4, dmg: 12, pellets: 1, spread: 0.018, speed: 85, gravity: 3, range: 60, reload: 1.2, kick: 0.02, proj: 'pellet', sound: 'rifle', ideal: 12 };
+  const ALL_GUNS = [...WEAPONS, PISTOL];
   const CLASSES = {
     fusilero: { name: 'Fusilero', hp: 100, speed: 6.2, jump: 8.3, nades: 2, reloadMul: 0.7 },
     escudero: { name: 'Escudero', hp: 150, speed: 5.3, jump: 7.8, nades: 2, reloadMul: 1 },
@@ -94,7 +97,7 @@
   }
   const plastic = (hex) => mat(hex, { spec: 0.55, power: 48 });
 
-  const colliders = [];
+  let colliders = []; // los del mapa que se está jugando (cada mapa tiene los suyos)
   function addCollider(x0, y0, z0, x1, y1, z1) {
     const c = { min: { x: x0, y: y0, z: z0 }, max: { x: x1, y: y1, z: z1 } };
     colliders.push(c);
@@ -483,6 +486,458 @@
   }
 
   // ------------------------------------------------------------------
+  // Mapas de la Batalla campal: Plaza y Casa de 2 pisos.
+  // Cada mapa guarda sus piezas y sus paredes (colliders); se arma la primera vez que se juega
+  // y después solo se prende o se apaga.
+  // ------------------------------------------------------------------
+  const MAPS = {
+    jardin: { id: 'jardin', name: 'Jardín', built: true, meshes: [], colliders: [] },
+    plaza: { id: 'plaza', name: 'Plaza', players: 16, drop: 9, built: false, meshes: [], colliders: [], nav: null },
+    casa: { id: 'casa', name: 'Casa', players: 12, drop: 0, built: false, meshes: [], colliders: [], nav: null }
+  };
+  let curMap = MAPS.jardin;
+  function setMap(id) {
+    const m = MAPS[id];
+    if (!m.built) {
+      colliders = m.colliders; statics.length = 0;
+      (id === 'plaza' ? buildPlaza : buildCasa)();
+      mergeStatics();
+      statics.forEach((s) => s.freezeWorldMatrix());
+      m.meshes = statics.slice(); statics.length = 0;
+      m.nav = buildNav(m.bounds);
+      m.built = true;
+    }
+    for (const k in MAPS) if (MAPS[k] !== m) MAPS[k].meshes.forEach((s) => s.setEnabled(false));
+    m.meshes.forEach((s) => s.setEnabled(true));
+    colliders = m.colliders; curMap = m;
+    scene.fogStart = m.fog ? m.fog[0] : 220; scene.fogEnd = m.fog ? m.fog[1] : 600;
+  }
+
+  // --- Caminos para los bots: grilla de baldosas donde uno se puede parar (puede haber varias
+  // alturas en la misma baldosa, como el piso 1 y el piso 2) y búsqueda A* ---
+  function buildNav(bd) {
+    const [x0, z0, x1, z1, cell] = bd;
+    const nx = Math.ceil((x1 - x0) / cell), nz = Math.ceil((z1 - z0) / cell);
+    const cols = new Array(nx * nz), nodes = [];
+    const probe = { pos: new V3(), r: 0.45, h: 1.7 };
+    for (let ix = 0; ix < nx; ix++) for (let iz = 0; iz < nz; iz++) {
+      const x = x0 + (ix + 0.5) * cell, z = z0 + (iz + 0.5) * cell, list = [];
+      const tops = [];
+      for (const c of colliders) if (x >= c.min.x && x <= c.max.x && z >= c.min.z && z <= c.max.z) tops.push(c.max.y);
+      tops.sort((a, b) => a - b);
+      for (const y of tops) {
+        if (list.length && y - nodes[list[list.length - 1]].y < 0.05) continue;
+        probe.pos.set(x, y + 0.02, z);
+        if (collidesAny(probe)) continue;
+        list.push(nodes.length); nodes.push({ x, y, z, ix, iz, nb: [] });
+      }
+      cols[ix * nz + iz] = list;
+    }
+    const colAt = (ix, iz) => (ix < 0 || iz < 0 || ix >= nx || iz >= nz ? null : cols[ix * nz + iz]);
+    const near = (list, y) => { let best = -1, bd2 = STEP + 0.01; if (list) for (const k of list) { const d = Math.abs(nodes[k].y - y); if (d < bd2) { bd2 = d; best = k; } } return best; };
+    for (const n of nodes) {
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        if (!dx && !dz) continue;
+        const k = near(colAt(n.ix + dx, n.iz + dz), n.y);
+        if (k < 0) continue;
+        if (dx && dz && (near(colAt(n.ix + dx, n.iz), n.y) < 0 || near(colAt(n.ix, n.iz + dz), n.y) < 0)) continue;
+        n.nb.push(k);
+      }
+    }
+    // solo sirve la parte más grande conectada (el techo o la punta de una pared no cuentan)
+    const comp = new Int32Array(nodes.length).fill(-1);
+    let bestC = -1, bestN = 0;
+    for (let i = 0, c = 0; i < nodes.length; i++) {
+      if (comp[i] >= 0) continue;
+      let cnt = 0; const st = [i]; comp[i] = c;
+      while (st.length) { const u = st.pop(); cnt++; for (const v of nodes[u].nb) if (comp[v] < 0) { comp[v] = c; st.push(v); } }
+      if (cnt > bestN) { bestN = cnt; bestC = c; }
+      c++;
+    }
+    const main = [];
+    for (let i = 0; i < cols.length; i++) if (cols[i]) cols[i] = cols[i].filter((k) => comp[k] === bestC);
+    nodes.forEach((n, i) => { if (comp[i] === bestC) main.push(i); });
+    function nodeAt(x, y, z) {
+      const ix = Math.floor((x - x0) / cell), iz = Math.floor((z - z0) / cell);
+      let best = -1, bdd = Infinity;
+      for (let r = 0; r <= 4 && best < 0; r++) {
+        for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) {
+          if (Math.max(Math.abs(a), Math.abs(b)) !== r) continue;
+          const list = colAt(ix + a, iz + b); if (!list) continue;
+          for (const k of list) {
+            const n = nodes[k], dy = n.y - y;
+            if (dy > 1.2) continue;
+            const d = Math.hypot(n.x - x, n.z - z) + Math.abs(dy) * 2;
+            if (d < bdd) { bdd = d; best = k; }
+          }
+        }
+      }
+      return best;
+    }
+    // ¿se puede ir derecho de a hasta b sin cambiar de altura?
+    function flatLine(a, b) {
+      if (Math.abs(a.y - b.y) > 0.05) return false;
+      const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.4);
+      for (let i = 1; i < n; i++) {
+        const k = i / n, x = a.x + (b.x - a.x) * k, z = a.z + (b.z - a.z) * k;
+        const list = colAt(Math.floor((x - x0) / cell), Math.floor((z - z0) / cell));
+        if (!list || !list.some((q) => Math.abs(nodes[q].y - a.y) < 0.05)) return false;
+      }
+      return true;
+    }
+    const N = nodes.length, gs = new Float32Array(N), came = new Int32Array(N), seen = new Int32Array(N), closed = new Int32Array(N);
+    let stamp = 0;
+    function route(ax, ay, az, tx, ty, tz) {
+      const s = nodeAt(ax, ay, az), g = nodeAt(tx, ty, tz);
+      if (s < 0 || g < 0) return null;
+      stamp++;
+      const G = nodes[g], hf = (k) => Math.hypot(nodes[k].x - G.x, nodes[k].y - G.y, nodes[k].z - G.z);
+      const heap = [], hk = [];
+      const push = (k, f) => { heap.push(f); hk.push(k); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p] <= heap[i]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; [hk[p], hk[i]] = [hk[i], hk[p]]; i = p; } };
+      const pop = () => {
+        const top = hk[0], lf = heap.pop(), lk = hk.pop();
+        if (heap.length) { heap[0] = lf; hk[0] = lk; let i = 0; for (;;) { const l = i * 2 + 1, r = l + 1; let m = i; if (l < heap.length && heap[l] < heap[m]) m = l; if (r < heap.length && heap[r] < heap[m]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; [hk[m], hk[i]] = [hk[i], hk[m]]; i = m; } }
+        return top;
+      };
+      gs[s] = 0; seen[s] = stamp; came[s] = -1; push(s, hf(s));
+      let found = false, exp = 0;
+      while (hk.length) {
+        const u = pop();
+        if (closed[u] === stamp) continue;
+        closed[u] = stamp;
+        if (u === g) { found = true; break; }
+        if (++exp > 9000) break;
+        const U = nodes[u];
+        for (const v of U.nb) {
+          if (closed[v] === stamp) continue;
+          const V = nodes[v], ng = gs[u] + Math.hypot(V.x - U.x, (V.y - U.y) * 1.5, V.z - U.z);
+          if (seen[v] !== stamp || ng < gs[v]) { seen[v] = stamp; gs[v] = ng; came[v] = u; push(v, ng + hf(v)); }
+        }
+      }
+      if (!found) return null;
+      const path = [];
+      for (let k = g; k >= 0; k = came[k]) path.push(nodes[k]);
+      path.reverse();
+      // atajos: en los tramos planos se va derecho
+      const out = [];
+      let cur = path[0], i = 1;
+      if (path.length === 1) return [{ x: G.x, y: G.y, z: G.z }];
+      while (i < path.length) {
+        let j = i;
+        while (j + 1 < path.length && j - i < 14 && flatLine(cur, path[j + 1])) j++;
+        out.push({ x: path[j].x, y: path[j].y, z: path[j].z }); cur = path[j]; i = j + 1;
+      }
+      return out;
+    }
+    const randomPoint = () => { const n = nodes[pick(main)]; return { x: n.x, y: n.y, z: n.z }; };
+    return { route, randomPoint, nodeAt, size: main.length };
+  }
+
+  function grassMaterial(name, scale) {
+    const g = new BABYLON.StandardMaterial(name, scene);
+    g.diffuseTexture = textTexture(512, 512, (c, w, h) => {
+      c.fillStyle = '#6cc04a'; c.fillRect(0, 0, w, h);
+      for (let i = 0; i < 2600; i++) { c.fillStyle = pick(['#5fb33e', '#7ccd55', '#58a83a', '#86d65f']); c.fillRect(Math.random() * w, Math.random() * h, 2, 5 + Math.random() * 6); }
+    });
+    g.diffuseTexture.uScale = g.diffuseTexture.vScale = scale;
+    g.specularColor = C3.Black();
+    return g;
+  }
+  function woodMaterial(name, base, line, scale) {
+    const w = new BABYLON.StandardMaterial(name, scene);
+    w.diffuseTexture = textTexture(512, 512, (c, W, Hh) => {
+      c.fillStyle = base; c.fillRect(0, 0, W, Hh);
+      for (let i = 0; i < 8; i++) { c.fillStyle = line; c.fillRect(0, (i * Hh) / 8, W, 3); }
+      for (let i = 0; i < 60; i++) { c.strokeStyle = 'rgba(90,50,20,0.12)'; c.lineWidth = 1 + Math.random() * 2; const y = Math.random() * Hh; c.beginPath(); c.moveTo(0, y); for (let x = 0; x <= W; x += 32) c.lineTo(x, y + Math.sin(x / 60 + i) * 3); c.stroke(); }
+    });
+    w.diffuseTexture.uScale = w.diffuseTexture.vScale = scale;
+    w.specularColor = new C3(0.1, 0.08, 0.06);
+    return w;
+  }
+  function sphereDeco(d, x, y, z, hex, sy = 1) {
+    const s = BABYLON.MeshBuilder.CreateSphere('deco', { diameter: d, segments: 10 }, scene);
+    s.position.set(x, y, z); s.scaling.y = sy; s.material = typeof hex === 'string' ? mat(hex) : hex; finishStatic(s, false);
+    return s;
+  }
+  function tree(x, z, h = 7, leaf = '#4caf50', collide = true) {
+    cyl('trunk', 1.6, h, x, 0, z, mat('#8d5a34'), { tess: 12, collide });
+    for (let k = 0; k < 3; k++) sphereDeco(rand(6, 8), x + rand(-1.8, 1.8), h + rand(-0.5, 2), z + rand(-1.8, 1.8), pick([leaf, '#3f9b3a', '#5cbf4f']));
+  }
+  // Pared con huecos (puertas o ventanas). Recta en X (en z fijo) o en Z (en x fijo).
+  // holes: [centro a lo largo de la pared, ancho, y0, y1]
+  function wall(alongX, fixed, a0, a1, y0, y1, th, material, holes = [], opt = {}) {
+    const cuts = [a0, a1];
+    holes.forEach(([c, w]) => cuts.push(c - w / 2, c + w / 2));
+    const xs = [...new Set(cuts)].sort((p, q) => p - q).filter((v) => v >= a0 && v <= a1);
+    for (let i = 0; i < xs.length - 1; i++) {
+      const s0 = xs[i], s1 = xs[i + 1], mid = (s0 + s1) / 2, len = s1 - s0;
+      if (len < 0.01) continue;
+      const hs = holes.filter(([c, w]) => mid > c - w / 2 && mid < c + w / 2);
+      const pieces = [];
+      if (!hs.length) pieces.push([y0, y1]);
+      else { const [, , hy0, hy1] = hs[0]; if (hy0 > y0) pieces.push([y0, hy0]); if (hy1 < y1) pieces.push([hy1, y1]); }
+      for (const [p0, p1] of pieces) {
+        if (alongX) box('wall', len, p1 - p0, th, mid, p0, fixed, material, opt);
+        else box('wall', th, p1 - p0, len, fixed, p0, mid, material, opt);
+      }
+    }
+  }
+  // Losa (piso o techo) con agujeros rectangulares [x0,z0,x1,z1]
+  function slab(x0, z0, x1, z1, y0, y1, material, holes = []) {
+    const xs = [...new Set([x0, x1, ...holes.flatMap((h) => [h[0], h[2]])])].filter((v) => v >= x0 && v <= x1).sort((a, b) => a - b);
+    for (let i = 0; i < xs.length - 1; i++) {
+      const xa = xs[i], xb = xs[i + 1], xm = (xa + xb) / 2;
+      const hs = holes.filter((h) => xm > h[0] && xm < h[2]).map((h) => [h[1], h[3]]).sort((a, b) => a[0] - b[0]);
+      let z = z0;
+      const spans = [];
+      for (const [hz0, hz1] of hs) { if (hz0 > z) spans.push([z, hz0]); z = Math.max(z, hz1); }
+      if (z < z1) spans.push([z, z1]);
+      for (const [za, zb] of spans) box('slab', xb - xa, y1 - y0, zb - za, xm, y0, (za + zb) / 2, material, { shadow: false });
+    }
+  }
+  // Escalera de escalones de 0,5 (los soldaditos los suben solos). dir: hacia dónde sube (+1/-1) a lo largo de X
+  function stairsX(xStart, dir, zc, width, topY, material) {
+    const n = Math.round(topY / 0.5), depth = 1; // 1 m: coincide con las baldosas del mapa de los bots
+    for (let i = 0; i < n; i++) {
+      const xa = xStart + dir * i * depth, xm = xa + dir * depth / 2;
+      box('step', depth, 0.5 * (i + 1), width, xm, 0, zc, i % 2 ? material : mat('#f8f9fa'));
+    }
+    return xStart + dir * n * depth;
+  }
+
+  // --- PLAZA: al aire libre, con pasto, fuente, juegos, arenero y glorieta ---
+  function buildPlaza() {
+    const S = 60;
+    MAPS.plaza.bounds = [-S, -S, S, S, 1.25];
+    const ground = BABYLON.MeshBuilder.CreateGround('pGround', { width: 900, height: 900 }, scene);
+    ground.material = grassMaterial('pGrass', 70); finishStatic(ground, false);
+    addCollider(-S - 6, -1, -S - 6, S + 6, 0, S + 6);
+    // caminos de piedra en cruz y un anillo alrededor de la fuente
+    const stone = mat('#eadfc8');
+    box('path', 6, 0.04, 2 * S, 0, 0, 0, stone, { collide: false, shadow: false });
+    box('path', 2 * S, 0.04, 6, 0, 0, 0, stone, { collide: false, shadow: false });
+    const ring = BABYLON.MeshBuilder.CreateTorus('pRing', { diameter: 30, thickness: 6, tessellation: 64 }, scene);
+    ring.scaling.y = 0.012; ring.position.y = 0.03; ring.material = stone; finishStatic(ring, false);
+    // fuente en el medio
+    cyl('basin', 14, 0.9, 0, 0, 0, '#d6ccc2', { collide: false, tess: 40 });
+    cyl('water', 12.6, 0.95, 0, 0, 0, mat('#5ec8ff', { emissive: '#1b6a9c', alpha: 0.85 }), { collide: false, shadow: false, tess: 40 });
+    for (let i = 0; i < 14; i++) { const z0 = -7 + i, z1 = z0 + 1, ze = Math.max(Math.abs(z0), Math.abs(z1)), hw = Math.sqrt(Math.max(0, 49 - ze * ze)); if (hw > 0.3) addCollider(-hw, 0, z0, hw, 0.9, z1); }
+    cyl('fCol', 2.2, 3.6, 0, 0.9, 0, '#c9bba9', { tess: 16 });
+    cyl('fBowl', 5.2, 0.6, 0, 4.4, 0, '#d6ccc2', { tess: 24 });
+    cyl('fJet', 0.5, 2.4, 0, 5, 0, mat('#8fd8ff', { emissive: '#4aa8e0', alpha: 0.7 }), { collide: false, shadow: false, tess: 8 });
+    sphereDeco(1.6, 0, 7.4, 0, mat('#8fd8ff', { emissive: '#4aa8e0', alpha: 0.7 }));
+    // bancos al lado de los caminos
+    const bench = (x, z, alongZ, back) => {
+      const w = alongZ ? 1.2 : 4, d = alongZ ? 4 : 1.2;
+      box('bench', w, 0.6, d, x, 0, z, '#b5651d');
+      if (alongZ) box('bBack', 0.3, 1.0, 4, x + back * 0.55, 0.6, z, '#8d4b16'); else box('bBack', 4, 1.0, 0.3, x, 0.6, z + back * 0.55, '#8d4b16');
+    };
+    for (const s of [-1, 1]) for (const d of [17, 40]) { bench(4.6, s * d, true, 1); bench(-4.6, s * d + 6 * s, true, -1); bench(s * d, 4.6, false, 1); bench(s * d + 6 * s, -4.6, false, -1); }
+    // faroles
+    for (const [x, z] of [[11, 11], [-11, 11], [11, -11], [-11, -11], [4, 30], [-4, -30], [30, -4], [-30, 4]]) {
+      cyl('lamp', 0.35, 6, x, 0, z, '#495057', { tess: 8 });
+      sphereDeco(1.1, x, 6.3, z, mat('#fff3b0', { emissive: '#ffd23f' }));
+    }
+    // árboles
+    for (const [x, z] of [[14, 22], [24, 12], [-14, 22], [-22, 14], [14, -22], [24, -14], [-16, -20], [-24, -12], [10, 52], [-10, 52], [52, 10], [52, -10], [-52, 10], [-52, -10], [10, -52], [-10, -52], [34, 34], [-34, -34]]) tree(x, z, rand(6.5, 8.5));
+    // canteros con flores (sirven para cubrirse)
+    for (const [x, z, w, d] of [[18, 31, 6, 2], [-18, -31, 6, 2], [31, -18, 2, 6], [-31, 18, 2, 6], [44, 0 + 20, 2, 6], [-44, -20, 2, 6]]) {
+      box('planter', w, 0.9, d, x, 0, z, '#bc6c25');
+      box('soil', w - 0.3, 0.1, d - 0.3, x, 0.9, z, '#6b4226', { collide: false, shadow: false });
+      for (let k = 0; k < 4; k++) sphereDeco(0.8, x + rand(-w / 2 + 0.5, w / 2 - 0.5), 1.25, z + rand(-d / 2 + 0.5, d / 2 - 0.5), pick(['#ff70a6', '#ffd23f', '#c77dff', '#ffffff']));
+    }
+
+    // Juegos (noreste): torre con escalones, tobogán y hamacas
+    const TX = 36, TZ = 36;
+    box('tower', 5, 3, 5, TX, 0, TZ, '#ff9f1c');
+    for (let i = 0; i < 6; i++) box('tStep', 2.4, 0.5 * (i + 1), 0.8, TX - 0.8, 0, TZ - 2.5 - 0.4 - (5 - i) * 0.8, i % 2 ? '#3a86ff' : '#ffd23f');
+    for (const [a, b, w, d] of [[0, 2.35, 5, 0.3], [2.35, 0, 0.3, 5], [-2.35, 0.9, 0.3, 3.2]]) box('tRail', w, 1.0, d, TX + a, 3, TZ + b, '#ef233c');
+    for (const [a, b] of [[-2.3, -2.3], [2.3, -2.3], [-2.3, 2.3], [2.3, 2.3]]) cyl('tPost', 0.35, 3.6, TX + a, 3, TZ + b, '#ef233c', { tess: 8, collide: false });
+    const roofT = BABYLON.MeshBuilder.CreateCylinder('tRoof', { diameterTop: 0, diameterBottom: 7.6, height: 2.4, tessellation: 4 }, scene);
+    roofT.position.set(TX, 7.8, TZ); roofT.rotation.y = Math.PI / 4; roofT.material = plastic('#3a86ff'); finishStatic(roofT);
+    const slide = BABYLON.MeshBuilder.CreateBox('slide', { width: 7, height: 0.2, depth: 1.8 }, scene);
+    slide.position.set(TX + 2.5 + 3.1, 1.5, TZ); slide.rotation.z = -0.44; slide.material = plastic('#9ef01a'); finishStatic(slide);
+    // hamacas
+    const SX = 22, SZ = 46;
+    for (const s of [-1, 1]) { beam('swA', 0.3, new V3(SX + s * 5, 0, SZ - 1.5), new V3(SX + s * 5, 5, SZ), '#8338ec'); beam('swB', 0.3, new V3(SX + s * 5, 0, SZ + 1.5), new V3(SX + s * 5, 5, SZ), '#8338ec'); addCollider(SX + s * 5 - 0.2, 0, SZ - 1.6, SX + s * 5 + 0.2, 4.5, SZ + 1.6); }
+    beam('swTop', 0.35, new V3(SX - 5, 5, SZ), new V3(SX + 5, 5, SZ), '#ff006e');
+    for (const s of [-2, 2]) { beam('rope', 0.06, new V3(SX + s - 0.6, 5, SZ), new V3(SX + s - 0.6, 1.0, SZ), '#adb5bd'); beam('rope', 0.06, new V3(SX + s + 0.6, 5, SZ), new V3(SX + s + 0.6, 1.0, SZ), '#adb5bd'); box('seat', 1.5, 0.15, 0.6, SX + s, 0.85, SZ, '#ffd23f', { collide: false }); }
+    // sube y baja
+    box('seesawBase', 0.8, 0.8, 0.8, 46, 0, 22, '#495057');
+    const ss = BABYLON.MeshBuilder.CreateBox('seesaw', { width: 0.8, height: 0.2, depth: 8 }, scene); ss.position.set(46, 0.9, 22); ss.rotation.x = 0.18; ss.material = plastic('#06d6a0'); finishStatic(ss);
+
+    // Arenero (suroeste) con balde gigante y castillo de arena
+    const AX = -36, AZ = -36, AH = 9;
+    const sand = mat('#f2d398');
+    for (const [a, b, w, d] of [[0, -AH, 2 * AH, 0.6], [0, AH, 2 * AH, 0.6], [-AH, 0, 0.6, 2 * AH], [AH, 0, 0.6, 2 * AH]]) box('sbEdge', w, 0.5, d, AX + a, 0, AZ + b, '#e76f51');
+    box('sand', 2 * AH - 0.6, 0.3, 2 * AH - 0.6, AX, 0, AZ, sand, { shadow: false });
+    cyl('bucket', 3.2, 3.6, AX + 4, 0.3, AZ + 3, '#ef233c', { tess: 20 });
+    box('bHandle', 3.4, 0.2, 0.2, AX + 4, 4.2, AZ + 3, '#ffd23f', { collide: false });
+    for (const [a, b, s, h] of [[-3, -3, 4, 2.2], [-3, -3, 2.4, 3.6], [-6, -5, 1.6, 2.6], [-0.5, -6, 1.6, 2.6], [-6, -0.5, 1.6, 2.6]]) box('castle', s, h, s, AX + a, 0.3, AZ + b, sand);
+    box('shovel', 0.4, 0.3, 5, AX + 5, 0.3, AZ - 5, '#3a86ff', { collide: false });
+
+    // Glorieta (noroeste)
+    const GX = -36, GZ = 36;
+    box('gFloor', 11, 0.5, 11, GX, 0, GZ, '#f1e3c8');
+    for (const [a, b] of [[-5, -5], [5, -5], [-5, 5], [5, 5]]) box('gPost', 0.6, 4.5, 0.6, GX + a, 0.5, GZ + b, '#ffffff');
+    for (const s of [-1, 1]) { wall(true, GZ + s * 5, GX - 5, GX + 5, 0.5, 1.5, 0.3, '#ffffff', [[GX, 3, 0, 9]]); wall(false, GX + s * 5, GZ - 5, GZ + 5, 0.5, 1.5, 0.3, '#ffffff', [[GZ, 3, 0, 9]]); }
+    const gRoof = BABYLON.MeshBuilder.CreateCylinder('gRoof', { diameterTop: 0.5, diameterBottom: 16.5, height: 3.4, tessellation: 4 }, scene);
+    gRoof.position.set(GX, 6.7, GZ); gRoof.rotation.y = Math.PI / 4; gRoof.material = plastic('#ef233c'); finishStatic(gRoof, false);
+    box('gTable', 2.4, 1.1, 2.4, GX, 0.5, GZ, '#a47148');
+
+    // Setos y juguetes gigantes (sureste)
+    const hedge = mat('#3f8f3a');
+    for (const [x, z, w, d] of [[24, -24, 10, 1.4], [28.3, -28, 1.4, 8], [42, -20, 1.4, 10], [36, -42, 12, 1.4], [48, -34, 1.4, 8], [22, -44, 1.4, 8]]) box('hedge', w, 2.4, d, x, 0, z, hedge);
+    box('toyBlock', 3, 3, 3, 36, 0, -30, '#ff006e'); box('toyBlock', 2, 2, 2, 36, 3, -30, '#ffd23f');
+    box('toyBlock', 2.5, 2.5, 2.5, 46, 0, -46, '#3a86ff');
+    const ball = BABYLON.MeshBuilder.CreateSphere('pBall', { diameter: 4, segments: 16 }, scene);
+    ball.position.set(30, 2, -48); const bm = new BABYLON.StandardMaterial('pBallM', scene); bm.diffuseTexture = stripeTexture(['#ff006e', '#ffffff', '#3a86ff', '#ffffff', '#ffd23f', '#ffffff'], 6); ball.material = bm; finishStatic(ball);
+    addCollider(28.6, 0, -49.4, 31.4, 3.6, -46.6);
+    // tachos de basura
+    for (const [x, z] of [[8, 4], [-8, -4], [4, -8], [-4, 8]]) cyl('bin', 1.1, 1.3, x + Math.sign(x) * 8, 0, z + Math.sign(z) * 8, '#2fb344', { tess: 12 });
+
+    // borde: un seto alto alrededor de toda la plaza
+    for (const s of [-1, 1]) { box('border', 2 * S + 4, 3.2, 2, 0, 0, s * (S + 1), hedge); box('border', 2, 3.2, 2 * S + 4, s * (S + 1), 0, 0, hedge); }
+    // ciudad alrededor (solo para mirar)
+    const bCols = ['#ffd6a5', '#caffbf', '#9bf6ff', '#ffc6ff', '#fdffb6', '#bdb2ff', '#ffadad'];
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2, r = rand(95, 130), x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const w = rand(14, 24), h = rand(18, 46);
+      box('bld', w, h, w, x, 0, z, bCols[i % bCols.length], { collide: false, shadow: false });
+      for (let k = 0; k < 3; k++) box('win', w + 0.2, 1.4, w * 0.7, x, h * (0.25 + k * 0.22), z, mat('#7aa5d8'), { collide: false, shadow: false });
+    }
+    for (let i = 0; i < 16; i++) { const a = rand(0, Math.PI * 2), r = rand(68, 85); tree(Math.cos(a) * r, Math.sin(a) * r, rand(7, 10), '#4caf50', false); }
+  }
+
+  // --- CASA DE 2 PISOS, con patio y cerca ---
+  function buildCasa() {
+    const HX = 24, HZ = 16, F2 = 5, TOP = 10, T = 0.4, YX = 38, YZ = 30;
+    MAPS.casa.bounds = [-YX, -YZ, YX, YZ, 1.0];
+    MAPS.casa.fog = [120, 400];
+    const ground = BABYLON.MeshBuilder.CreateGround('cGround', { width: 900, height: 900 }, scene);
+    ground.material = grassMaterial('cGrass', 70); finishStatic(ground, false);
+    addCollider(-YX - 4, -1, -YZ - 4, YX + 4, 0, YZ + 4);
+    // pisos y paredes
+    const floor1 = woodMaterial('floor1', '#d9a066', '#b5783e', 6);
+    const floor2 = woodMaterial('floor2', '#e8c39e', '#c99a6b', 6);
+    box('f1', 2 * HX, 0.04, 2 * HZ, 0, 0, 0, floor1, { collide: false, shadow: false });
+    const ext = mat('#fff1d6'), in1 = mat('#bde0fe', { emissive: '#2c3e50' }), in2 = mat('#ffd6e0', { emissive: '#4a2f36' }), trim = mat('#e07a5f');
+    const D = 3.2, Wn = 3, w1 = [1.3, 3.1], w2 = [F2 + 1.3, F2 + 3.1];
+    const door = (c) => [c, D, 0, 3.4];
+    const win = (c, f) => [c, Wn, ...(f === 1 ? w1 : w2)];
+    // fachadas (de 0 a 10, con puertas abajo y ventanas en los dos pisos)
+    wall(true, -HZ + T / 2, -HX, HX, 0, TOP, T, ext, [win(-20, 1), door(-14), win(-6, 1), door(4), win(12, 1), win(20, 1), win(-18, 2), win(-8, 2), win(4, 2), win(16, 2)], { shadow: false });
+    wall(true, HZ - T / 2, -HX, HX, 0, TOP, T, ext, [win(-20, 1), win(-12, 1), door(-4), win(4, 1), win(14, 1), win(20, 1), win(-18, 2), win(-6, 2), win(6, 2), win(18, 2)], { shadow: false });
+    wall(false, -HX + T / 2, -HZ + T, HZ - T, 0, TOP, T, ext, [door(-8), win(4, 1), win(-8, 2), win(8, 2)], { shadow: false });
+    wall(false, HX - T / 2, -HZ + T, HZ - T, 0, TOP, T, ext, [door(8), win(-6, 1), win(-8, 2), win(8, 2)], { shadow: false });
+    // detalles de afuera: postigos en las ventanas, una franja entre pisos y un zócalo de piedra
+    const shutter = mat('#2a9d8f'), out = 0.3;
+    const facade = (alongX, fixed, sign, holes) => holes.forEach(([c, w, y0, y1]) => {
+      if (y0 <= 0) { // puerta: marco de color arriba
+        if (alongX) box('lintel', w + 0.8, 0.4, 0.2, c, y1, fixed + sign * out, trim, { collide: false, shadow: false });
+        else box('lintel', 0.2, 0.4, w + 0.8, fixed + sign * out, y1, c, trim, { collide: false, shadow: false });
+        return;
+      }
+      for (const k of [-1, 1]) {
+        if (alongX) box('shutter', 0.9, y1 - y0, 0.12, c + k * (w / 2 + 0.5), y0, fixed + sign * out, shutter, { collide: false, shadow: false });
+        else box('shutter', 0.12, y1 - y0, 0.9, fixed + sign * out, y0, c + k * (w / 2 + 0.5), shutter, { collide: false, shadow: false });
+      }
+      if (alongX) box('sill', w + 0.4, 0.2, 0.4, c, y0 - 0.2, fixed + sign * out, '#ffffff', { collide: false, shadow: false });
+      else box('sill', 0.4, 0.2, w + 0.4, fixed + sign * out, y0 - 0.2, c, '#ffffff', { collide: false, shadow: false });
+    });
+    facade(true, -HZ, -1, [win(-20, 1), door(-14), win(-6, 1), door(4), win(12, 1), win(20, 1), win(-18, 2), win(-8, 2), win(4, 2), win(16, 2)]);
+    facade(true, HZ, 1, [win(-20, 1), win(-12, 1), door(-4), win(4, 1), win(14, 1), win(20, 1), win(-18, 2), win(-6, 2), win(6, 2), win(18, 2)]);
+    facade(false, -HX, -1, [door(-8), win(4, 1), win(-8, 2), win(8, 2)]);
+    facade(false, HX, 1, [door(8), win(-6, 1), win(-8, 2), win(8, 2)]);
+    for (const sg of [-1, 1]) {
+      box('band', 2 * HX + 0.6, 0.45, 0.3, 0, F2 - 0.45, sg * (HZ + 0.1), trim, { collide: false, shadow: false });
+      box('band', 0.3, 0.45, 2 * HZ + 0.6, sg * (HX + 0.1), F2 - 0.45, 0, trim, { collide: false, shadow: false });
+    }
+    // escalón de entrada y techito sobre la puerta principal
+    box('porch', 6, 0.3, 2.4, 4, 0, -HZ - 1.2, '#d6ccc2');
+    box('porchRoof', 6.4, 0.3, 2.6, 4, 3.9, -HZ - 1.3, '#d1495b', { collide: false });
+    // escaleras: A en la cocina (sube hacia +x), B en el comedor (sube hacia -x)
+    const holeA = [10, -HZ + T, 20.1, -12.2], holeB = [-20.1, 12.2, -10, HZ - T];
+    stairsX(10, 1, -14, 3.2, F2, mat('#f4a261'));
+    stairsX(-10, -1, 14, 3.2, F2, mat('#2a9d8f'));
+    // losa entre pisos (con los huecos de las escaleras) y techo
+    slab(-HX + T, -HZ + T, HX - T, HZ - T, F2 - 0.5, F2, floor2, [holeA, holeB]);
+    slab(-HX, -HZ, HX, HZ, TOP - 0.5, TOP, mat('#f8edeb'));
+    // cielorrasos claritos (la cara de abajo de las losas queda oscura si no)
+    const ceil = mat('#fffaf0', { emissive: '#8c857a' });
+    slab(-HX + T, -HZ + T, HX - T, HZ - T, F2 - 0.53, F2 - 0.5, ceil, [holeA, holeB]);
+    slab(-HX + T, -HZ + T, HX - T, HZ - T, TOP - 0.53, TOP - 0.5, ceil);
+    // barandas alrededor de los huecos de arriba
+    box('rail', 10.1, 1.0, 0.25, 15.05, F2, -12.1, trim); box('rail', 0.25, 1.0, 3.6, 9.9, F2, -14.2, trim);
+    box('rail', 10.1, 1.0, 0.25, -15.05, F2, 12.1, trim); box('rail', 0.25, 1.0, 3.6, -9.9, F2, 14.2, trim);
+    // paredes de adentro, piso 1: cocina, living, comedor, cuarto de juegos
+    wall(true, 0, -HX + T, HX - T, 0, F2 - 0.5, T, in1, [door(-16), [0, 5, 0, 3.6], door(15)], { shadow: false });
+    wall(false, -8, -HZ + T, 0, 0, F2 - 0.5, T, in1, [door(-8)], { shadow: false });
+    wall(false, 6, 0, HZ - T, 0, F2 - 0.5, T, in1, [door(6)], { shadow: false });
+    // piso 2: dormitorios y pasillo
+    wall(true, 2, -HX + T, HX - T, F2, TOP - 0.5, T, in2, [door(-15), door(0), door(16)], { shadow: false });
+    wall(false, -2, -HZ + T, 2, F2, TOP - 0.5, T, in2, [door(-8)], { shadow: false });
+    wall(false, 2, 2, HZ - T, F2, TOP - 0.5, T, in2, [door(9)], { shadow: false });
+    // techo a dos aguas (solo para mirar)
+    const roof = BABYLON.MeshBuilder.CreateCylinder('roof', { diameter: 1, height: 2 * HX + 2, tessellation: 3 }, scene);
+    roof.rotation.z = Math.PI / 2; roof.scaling.set(8, 1, 41); roof.position.set(0, TOP + 2, 0);
+    roof.material = plastic('#d1495b'); finishStatic(roof, false);
+    box('chimney', 2.5, 6, 2.5, 14, TOP, 6, '#9c6644', { collide: false });
+
+    // --- Muebles, piso 1 ---
+    // cocina (sureste): mesada, heladera, isla
+    box('counter', 14, 1.4, 1.6, 4, 0, -HZ + T + 0.8 + 3.5, '#f8f9fa'); // isla
+    box('fridge', 2.2, 4, 2, HX - T - 1.2, 0, -2, '#dee2e6');
+    box('counter', 1.6, 1.4, 8, HX - T - 0.8, 0, -8.5, '#adb5bd');
+    box('oven', 2, 1.4, 1.6, -2, 0, -1.2, '#495057');
+    // living (suroeste): sillón, mesita, tele
+    box('sofa', 7, 1.0, 2.2, -16, 0, -6, '#8338ec'); box('sofaBack', 7, 1.0, 0.6, -16, 1.0, -5.2, '#6a2fc0');
+    box('coffee', 3, 0.6, 1.6, -16, 0, -10, '#a47148');
+    box('tvStand', 6, 1.2, 1.2, -16, 0, -HZ + T + 0.6, '#343a40'); box('tv', 5, 2.6, 0.3, -16, 1.2, -HZ + T + 0.4, '#212529', { collide: false });
+    box('rug', 10, 0.03, 7, -16, 0.04, -8.5, '#ffafcc', { collide: false, shadow: false });
+    // comedor (noroeste): mesa larga con sillas (debajo te podés agachar)
+    box('tableTop', 8, 0.25, 3.4, -10, 1.25, 6, '#a47148');
+    for (const [a, b] of [[-3.7, -1.5], [3.7, -1.5], [-3.7, 1.5], [3.7, 1.5]]) box('tLeg', 0.3, 1.25, 0.3, -10 + a, 0, 6 + b, '#7f5539');
+    for (const a of [-2.5, 0, 2.5]) for (const s of [-1, 1]) box('chair', 1.2, 0.9, 1.2, -10 + a, 0, 6 + s * 2.6, '#ffbe0b');
+    box('shelf', 1.2, 3.5, 5, -HX + T + 0.6, 0, 3.5, '#9c6644');
+    // cuarto de juegos (noreste): bloques gigantes y una pelota
+    box('pBlock', 3, 3, 3, 15, 0, 9, '#ef233c'); box('pBlock', 2, 2, 2, 15, 3, 9, '#ffd23f');
+    box('pBlock', 2.5, 2.5, 2.5, 19.5, 0, 4, '#3a86ff'); box('pBlock', 2.2, 1.4, 4, 11, 0, 3.5, '#2fb344');
+    box('toyChest', 4, 1.6, 2, 19, 0, HZ - T - 1.2, '#e76f51');
+    box('rug2', 9, 0.03, 8, 15, 0.04, 8, '#a2d2ff', { collide: false, shadow: false });
+    // --- Muebles, piso 2 ---
+    box('rug3', 44, 0.03, 0.01, 0, F2 + 0.02, 0, '#ffffff', { collide: false, shadow: false });
+    box('bed', 4.4, 1.0, 6.5, -19, F2, -11, '#ff70a6'); box('pillow', 3.6, 0.4, 1.2, -19, F2 + 1.0, -13.4, '#ffffff', { collide: false });
+    box('bed', 4.4, 1.0, 6.5, -7, F2, -11, '#06d6a0'); box('pillow', 3.6, 0.4, 1.2, -7, F2 + 1.0, -13.4, '#ffffff', { collide: false });
+    box('wardrobe', 4.5, 3.6, 1.4, -13, F2, -1, '#9c6644');
+    box('bedBig', 7, 1.1, 7, 10, F2, -6, '#4361ee'); box('pillow', 6, 0.4, 1.2, 10, F2 + 1.1, -9, '#ffffff', { collide: false });
+    box('desk', 4, 1.3, 1.8, 20, F2, -4, '#a47148');
+    box('dresser', 1.4, 2.2, 4, 2.9, F2, 6, '#c08552');
+    box('bunk', 3.6, 1.0, 6, -21, F2, 7, '#ffbe0b'); box('bunkTop', 3.6, 0.4, 6, -21, F2 + 2.6, 7, '#ffbe0b'); box('bunkPost', 0.3, 2.6, 0.3, -19.4, F2 + 1.0, 4.2, '#bc6c25');
+    box('toys2', 2.4, 2.4, 2.4, -6, F2, 9, '#9ef01a'); box('toys2', 3, 1.2, 1.8, -12, F2, 4.5, '#ff9f1c');
+    box('bath', 5, 1.2, 2.6, 12, F2, 13.6, '#ffffff'); box('sink', 1.6, 1.6, 1.4, 20, F2, 13.9, '#e9ecef');
+    box('boxes', 3, 2.2, 3, 19, F2, 6, '#ddb892');
+
+    // --- Patio: cerca, árboles, galpón, pileta inflable y juguetes ---
+    const fence = mat('#ffffff');
+    for (const s of [-1, 1]) {
+      box('fence', 2 * YX, 2.6, 0.3, 0, 0, s * YZ, fence); box('fence', 0.3, 2.6, 2 * YZ, s * YX, 0, 0, fence);
+      for (let x = -YX; x <= YX; x += 2.5) box('picket', 0.5, 3.0, 0.5, x, 0, s * YZ, fence, { collide: false });
+      for (let z = -YZ; z <= YZ; z += 2.5) box('picket', 0.5, 3.0, 0.5, s * YX, 0, z, fence, { collide: false });
+    }
+    for (const [x, z] of [[-32, -24], [32, 24], [-32, 22], [30, -24], [0, 25], [-8, -25]]) tree(x, z, rand(6, 8));
+    box('shed', 6, 4, 5, 31, 0, -2, '#81b29a'); const shedRoof = BABYLON.MeshBuilder.CreateBox('shedRoof', { width: 7, height: 0.4, depth: 6 }, scene); shedRoof.position.set(31, 4.3, -2); shedRoof.rotation.z = 0.15; shedRoof.material = plastic('#3d405b'); finishStatic(shedRoof);
+    cyl('pool', 8, 0.8, -31, 0, -6, '#4cc9f0', { tess: 32 }); cyl('poolW', 7, 0.82, -31, 0, -6, mat('#90e0ef', { emissive: '#2a9dc0' }), { collide: false, shadow: false, tess: 32 });
+    box('car', 4, 1.6, 2.2, 10, 0, 22, '#ef233c'); box('carTop', 2.2, 1, 2, 9.6, 1.6, 22, '#ff8a95');
+    for (const a of [-1.3, 1.3]) for (const b of [-1.1, 1.1]) cyl('wheel', 1, 0.3, 10 + a, 0.2, 22 + b, '#212529', { collide: false, tess: 12 });
+    box('yBlock', 2.5, 2.5, 2.5, -20, 0, 23, '#ffbe0b'); box('yBlock', 2.5, 2.5, 2.5, -2, 0, -23, '#8338ec'); box('yBlock', 3, 1.5, 3, 20, 0, -23, '#06d6a0');
+    box('hedgeY', 8, 2.2, 1.4, -26, 0, 18, '#3f8f3a'); box('hedgeY', 1.4, 2.2, 8, 34, 0, 14, '#3f8f3a');
+    box('kennel', 3, 2.6, 3, -30, 0, 10, '#bc6c25');
+    // vecindario a lo lejos
+    for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2, r = rand(80, 110); tree(Math.cos(a) * r, Math.sin(a) * r, rand(8, 12), '#4caf50', false); }
+  }
+
+  // ------------------------------------------------------------------
   // Soldaditos (modelo hecho de piezas, un solo color como los de verdad)
   // ------------------------------------------------------------------
   function makeSoldierMesh(name, hex) {
@@ -686,8 +1141,24 @@
   P.wi = 0; P.nades = 2; P.crouch = false; P.eyeH = EYE; P.deathT = 0; P.bobT = 0;
   let bots = [], soldiers = [P];
   let diff = DIFFS.normal;
+  let mode = 'teams'; // 'teams' = por equipos en el Jardín, 'ffa' = Batalla campal (todos contra todos)
+  const FFA_COLORS = ['#ef233c', '#2fb344', '#ffbe0b', '#8338ec', '#ff70a6', '#fb5607', '#06d6a0', '#ff9f1c', '#9ef01a', '#f15bb5', '#8d5524', '#e9ecef', '#495057', '#00b4d8', '#c77dff'];
 
+  // Batalla campal: aparecés en un lugar al azar, lejos de los demás (en la Plaza caés desde el cielo)
+  function ffaSpawn() {
+    const nav = curMap.nav;
+    for (let tries = 0; tries < 60; tries++) {
+      const p = nav.randomPoint(), minD = tries < 40 ? 12 : 5;
+      if (soldiers.some((s) => s.alive && Math.hypot(s.pos.x - p.x, s.pos.z - p.z) < minD && Math.abs(s.pos.y - p.y) < 3)) continue;
+      const v = new V3(p.x, p.y + 0.05, p.z);
+      if (curMap.drop) { const hi = { pos: new V3(p.x, p.y + curMap.drop, p.z), r: 0.5, h: H }; if (!collidesAny(hi) && segWorld(new V3(p.x, p.y + 2, p.z), new V3(0, curMap.drop, 0)) >= 1) v.y = p.y + curMap.drop; }
+      return v;
+    }
+    const p = nav.randomPoint();
+    return new V3(p.x, p.y + 0.05, p.z);
+  }
   function spawnPoint(team) {
+    if (mode === 'ffa') return ffaSpawn();
     // en la parte de afuera de la mesa de su equipo
     const [dx, dz] = TEAM_DIR[team], c = baseCenter(team);
     for (let i = 0; i < 40; i++) {
@@ -701,12 +1172,13 @@
   }
   function respawn(s) {
     s.pos.copyFrom(spawnPoint(s.team)); s.vel.setAll(0);
-    s.alive = true; s.hp = s.maxHp; s.spawnProt = 1.5; s.yaw = Math.atan2(-s.pos.x, -s.pos.z); s.pitch = 0;
+    s.alive = true; s.hp = s.maxHp; s.spawnProt = mode === 'ffa' ? 3 : 1.5; s.yaw = Math.atan2(-s.pos.x, -s.pos.z); s.pitch = 0;
     s.reloadT = 0; s.h = H; s.item = null; s.shieldT = 0; setShield(s, false);
     if (s === P) {
-      P.weapons.forEach((w) => (w.ammo = w.def.mag)); P.nades = P.cls.nades; P.crouch = false;
+      P.weapons.forEach((w) => (w.ammo = w.def.mag)); P.nades = mode === 'ffa' ? 0 : P.cls.nades; P.crouch = false;
       showMsg(''); updateHud(true);
     } else {
+      if (mode === 'ffa') { s.wdef = PISTOL; s.nades = 0; }
       s.ammo = s.wdef.mag; s.target = null; s.route = null; s.lastSeen = null; s.pusher = Math.random() < 0.65; s.retreatT = 0; s.boxGoal = null; s.goal = null; s.deathT = 0; s.stuckT = 0;
       s.mesh.setEnabled(true); s.mesh.rotation.set(0, s.yaw, 0);
       if (s.marker) s.marker.setEnabled(true);
@@ -716,6 +1188,18 @@
   function createBots() {
     bots.forEach((b) => { b.mesh.dispose(); });
     bots = [];
+    if (mode === 'ffa') { // todos contra todos: cada uno es su propio "equipo"
+      const nouns = BOT_NOUNS.slice().sort(() => Math.random() - 0.5);
+      for (let i = 0; i < curMap.players - 1; i++) {
+        const b = makeSoldier(i + 1, true, pick(BOT_RANKS) + ' ' + (nouns.pop() || 'Juguete'));
+        b.skill = diff; b.wdef = PISTOL; b.hex = FFA_COLORS[i % FFA_COLORS.length];
+        b.mesh = makeSoldierMesh(b.name, b.hex);
+        b.strafeDir = Math.random() < 0.5 ? -1 : 1; b.think = Math.random() * 0.3; b.burst = 0; b.nadeCd = rand(6, 14);
+        bots.push(b);
+      }
+      soldiers = [P, ...bots];
+      return;
+    }
     // 8 por equipo: tu equipo tiene 7 bots + tú, los otros tres equipos 8 bots cada uno
     const nouns = BOT_NOUNS.slice().sort(() => Math.random() - 0.5);
     for (let team = 0; team < TEAMS; team++) {
@@ -770,7 +1254,7 @@
 
   const projectiles = [], grenades = [];
   function spawnProjectile(owner, def, origin, dir, dmgMul) {
-    const key = def.proj === 'pellet' ? 'pellet' + owner.team : def.proj;
+    const key = def.proj === 'pellet' ? 'pellet' + (owner.team % 4) : def.proj;
     const m = takeMesh(key);
     m.position.copyFrom(origin);
     projectiles.push({ pos: origin.clone(), vel: dir.scale(def.speed * rand(0.95, 1.05)), owner, team: owner.team, def, dmg: def.dmg * dmgMul, life: def.range / def.speed + 0.3, mesh: m, key });
@@ -967,6 +1451,93 @@
   }
 
   // ------------------------------------------------------------------
+  // Batalla campal: armas tiradas en el piso (se agarran solas al pasar por encima)
+  // ------------------------------------------------------------------
+  const PICKUP_KINDS = ['rifle', 'shotgun', 'dart', 'rifle', 'shotgun', 'nades'];
+  const PICKUP_GAP = 22, PICKUP_COUNT = { plaza: 20, casa: 16 };
+  const pickups = [], pickupMasters = {};
+  function clearPickups() { pickups.forEach((p) => { p.mesh.dispose(); p.ring.dispose(); }); pickups.length = 0; }
+  function pickupSpot() {
+    for (let i = 0; i < 40; i++) {
+      const q = curMap.nav.randomPoint();
+      if (pickups.some((o) => o.active && Math.hypot(o.pos.x - q.x, o.pos.z - q.z) < 7)) continue;
+      if (i < 30 && soldiers.some((o) => o.alive && Math.hypot(o.pos.x - q.x, o.pos.z - q.z) < 6)) continue;
+      return q;
+    }
+    return curMap.nav.randomPoint();
+  }
+  function placePickup(p, kind, pos) {
+    if (p.mesh) p.mesh.dispose();
+    p.kind = kind; p.pos.set(pos.x, pos.y, pos.z); p.active = true;
+    p.mesh = pickupMasters[kind].createInstance('pk'); p.mesh.scaling.setAll(kind === 'nades' ? 3 : 2.4); p.ring.setEnabled(true);
+    p.ring.position.set(pos.x, pos.y + 0.06, pos.z);
+  }
+  function spawnPickup(kind, pos, temp = false) {
+    const p = { pos: new V3(), mesh: null, ring: pickupMasters.ring.createInstance('pkr'), spin: rand(0, 6), active: false, respawnT: 0, temp };
+    placePickup(p, kind, pos);
+    pickups.push(p);
+    return p;
+  }
+  function setupPickups() {
+    clearPickups();
+    if (mode !== 'ffa') return;
+    const n = PICKUP_COUNT[curMap.id] || 16;
+    for (let i = 0; i < n; i++) spawnPickup(i < 3 ? WEAPONS[i].id : pick(PICKUP_KINDS), pickupSpot());
+  }
+  const gunDef = (id) => ALL_GUNS.find((w) => w.id === id);
+  function wantsPickup(s, p) {
+    if (s === P) return true;
+    if (p.kind === 'nades') return (s.nades || 0) < 3;
+    return s.wdef === PISTOL;
+  }
+  function takePickup(s, p) {
+    if (p.kind === 'nades') {
+      s.nades = (s.nades || 0) + 2;
+      if (s === P) { showBanner('● +2 CANICAS'); updateHud(true); }
+    } else {
+      const def = gunDef(p.kind);
+      if (s === P) {
+        let i = P.weapons.findIndex((w) => w.def === def);
+        if (i < 0) { P.weapons.push({ def, ammo: def.mag }); i = P.weapons.length - 1; buildSlots(); showBanner('¡AGARRASTE ' + def.name.toUpperCase() + '!'); }
+        else { P.weapons[i].ammo = def.mag; showBanner('+ BALAS · ' + def.name); }
+        if (i !== P.wi) switchWeapon(i); else updateHud(true);
+      } else { s.wdef = def; s.ammo = def.mag; s.reloadT = 0; s.route = null; }
+    }
+    sfx(s === P ? 'reload' : 'clink', s === P ? 1 : volAt(p.pos));
+  }
+  function updatePickups(dt) {
+    for (let i = pickups.length - 1; i >= 0; i--) {
+      const p = pickups[i];
+      if (!p.active) {
+        if (p.temp) { p.mesh.dispose(); p.ring.dispose(); pickups.splice(i, 1); continue; }
+        p.respawnT -= dt;
+        if (p.respawnT <= 0) placePickup(p, pick(PICKUP_KINDS), pickupSpot());
+        continue;
+      }
+      p.spin += dt;
+      p.mesh.position.set(p.pos.x, p.pos.y + 0.9 + Math.sin(p.spin * 2.5) * 0.15, p.pos.z);
+      p.mesh.rotation.y = p.spin * 1.6;
+      for (const s of soldiers) {
+        if (!s.alive || Math.hypot(s.pos.x - p.pos.x, s.pos.z - p.pos.z) > 1.3 || Math.abs(s.pos.y - p.pos.y) > 1.6 || !wantsPickup(s, p)) continue;
+        takePickup(s, p);
+        p.active = false; p.respawnT = PICKUP_GAP; p.mesh.setEnabled(false); p.ring.setEnabled(false);
+        break;
+      }
+    }
+  }
+  // La pickup de arma más cercana (para los bots que todavía tienen la pistolita)
+  function nearPickup(b, maxD, gunsOnly) {
+    let best = null, bd = maxD;
+    for (const p of pickups) {
+      if (!p.active || (gunsOnly && p.kind === 'nades')) continue;
+      const d = Math.hypot(p.pos.x - b.pos.x, p.pos.z - b.pos.z) + Math.abs(p.pos.y - b.pos.y) * 3;
+      if (d < bd) { bd = d; best = p; }
+    }
+    return best;
+  }
+  const aliveCount = () => soldiers.reduce((n, s) => n + (s.alive ? 1 : 0), 0);
+
+  // ------------------------------------------------------------------
   // Daño, eliminaciones y marcador
   // ------------------------------------------------------------------
   const score = new Array(TEAMS).fill(0);
@@ -988,18 +1559,22 @@
   function kill(t, attacker, how, head) {
     t.alive = false; t.hp = 0; t.deaths++;
     confetti(chestOf(t), 1);
-    if (attacker && attacker.team !== t.team) { score[attacker.team]++; attacker.kills++; }
+    if (attacker && attacker.team !== t.team) { if (mode === 'teams') score[attacker.team]++; attacker.kills++; }
     addFeed(attacker, t, how, head);
+    const ffa = mode === 'ffa';
     if (t === P) {
-      P.deathT = 3;
-      killerName = attacker ? attacker.name : null;
+      P.deathT = ffa ? 2.6 : 3;
+      killerName = attacker && attacker !== P ? attacker.name : null;
+      if (ffa) P.place = aliveCount() + 1;
     } else {
-      t.deathT = 0; t.respawnT = 4.5;
+      t.deathT = 0; t.respawnT = ffa ? Infinity : 4.5; // en la Batalla campal no se vuelve
       if (t.marker) t.marker.setEnabled(false);
+      if (ffa && t.wdef !== PISTOL) spawnPickup(t.wdef.id, t.pos, true); // suelta su arma
     }
     if (attacker === P && t !== P) { sfx('kill'); showBanner(head ? '¡TIRO A LA CABEZA! +1' : '¡ELIMINADO! +1'); }
     updateHud(true);
-    if (state === 'playing' && score.some((v) => v >= WIN_SCORE)) endMatch();
+    if (state === 'playing' && mode === 'teams' && score.some((v) => v >= WIN_SCORE)) endMatch();
+    if (state === 'playing' && ffa && P.alive && aliveCount() <= 1) endMatch();
   }
   let killerName = null;
 
@@ -1008,15 +1583,30 @@
   // ------------------------------------------------------------------
   const hud = { score: $('score'), hpfill: $('hpfill'), hptext: $('hptext'), wname: $('wname'), ammo: $('ammo'), nades: $('nades'), slots: $('slots'), msg: $('msg'), dmg: $('dmg'), cross: $('crosshair'), hit: $('hitmarker'), banner: $('banner'), feed: $('killfeed'), item: $('item'), shield: $('shieldfx') };
   let dmgFlash = 0, hitT = 0, bannerT = 0, lastHudKey = '';
-  // marcador de los 4 equipos
-  hud.score.innerHTML = TEAM_NAME.map((n, t) => `<span class="team" style="color:${TEAM_LIGHT[t]}">${n.toUpperCase()} <b id="sc${t}">0</b></span>`).join('') + `<span class="goal">Meta: ${WIN_SCORE}</span>`;
-  const scoreEls = TEAM_NAME.map((n, t) => $('sc' + t));
-  WEAPONS.forEach((w, i) => { const s = document.createElement('span'); s.textContent = (i + 1) + ' ' + w.name.split(' ')[0]; hud.slots.appendChild(s); });
+  // marcador: los 4 equipos, o en la Batalla campal cuántos quedan y tus eliminaciones
+  let scoreEls = [];
+  function setupScoreHud() {
+    if (mode === 'ffa') {
+      hud.score.innerHTML = `<span class="team">QUEDAN <b id="ffaLeft">0</b></span><span class="team" style="color:#ffd23f">ELIMINACIONES <b id="ffaKills">0</b></span><span class="goal ffa">${curMap.name} · gana el último en pie</span>`;
+      scoreEls = [];
+    } else {
+      hud.score.innerHTML = TEAM_NAME.map((n, t) => `<span class="team" style="color:${TEAM_LIGHT[t]}">${n.toUpperCase()} <b id="sc${t}">0</b></span>`).join('') + `<span class="goal">Meta: ${WIN_SCORE}</span>`;
+      scoreEls = TEAM_NAME.map((n, t) => $('sc' + t));
+    }
+  }
+  setupScoreHud();
+  buildSlots();
+  function buildSlots() {
+    hud.slots.innerHTML = '';
+    P.weapons.forEach((w, i) => { const s = document.createElement('span'); s.textContent = (i + 1) + ' ' + w.def.name.split(' ')[0]; hud.slots.appendChild(s); });
+  }
   function updateHud(force) {
     const w = P.weapons[P.wi];
-    const key = [score.join(','), Math.ceil(P.hp), P.wi, w.ammo, P.nades, P.reloadT > 0, P.item, Math.ceil(P.shieldT || 0)].join('|');
+    const left = mode === 'ffa' ? aliveCount() : 0;
+    const key = [score.join(','), left, P.kills, Math.ceil(P.hp), P.wi, w.ammo, P.nades, P.reloadT > 0, P.item, Math.ceil(P.shieldT || 0), P.weapons.length].join('|');
     if (!force && key === lastHudKey) return;
     lastHudKey = key;
+    if (mode === 'ffa') { $('ffaLeft').textContent = left; $('ffaKills').textContent = P.kills; }
     scoreEls.forEach((el, t) => { el.textContent = score[t]; });
     const lead = Math.max(...score);
     scoreEls.forEach((el, t) => el.parentNode.classList.toggle('lead', lead > 0 && score[t] === lead));
@@ -1039,12 +1629,17 @@
   function showBanner(t) { hud.banner.textContent = t; hud.banner.classList.add('show'); bannerT = 1.4; }
   function showMsg(t) { if (hud.msg.textContent !== t) hud.msg.textContent = t; }
   function addFeed(att, vic, how, head) {
-    const cls = (s) => (s === P ? 'me' : 't' + s.team);
-    const icon = { rifle: '•', shotgun: '▮', dart: '➶', nade: '●', mega: '💣', fall: '↓' }[how] || '•';
+    const icon = { rifle: '•', shotgun: '▮', dart: '➶', pistol: '·', nade: '●', mega: '💣', fall: '↓' }[how] || '•';
     const div = document.createElement('div');
-    if (!att || att === vic) div.innerHTML = `<span class="${cls(vic)}">${vic.name}</span> se cayó al pasto`;
-    else div.innerHTML = `<span class="${cls(att)}">${att.name}</span> ${icon}${head ? '✪' : ''} <span class="${cls(vic)}">${vic.name}</span>`;
+    if (!att || att === vic) div.innerHTML = `${nameTag(vic)} se cayó al pasto`;
+    else div.innerHTML = `${nameTag(att)} ${icon}${head ? '✪' : ''} ${nameTag(vic)}`;
+    if (mode === 'ffa' && state === 'playing') div.innerHTML += ` <small>· quedan ${aliveCount()}</small>`;
     pushFeed(div);
+  }
+  function nameTag(s) {
+    if (s === P) return `<span class="me">${s.name}</span>`;
+    if (mode === 'ffa') return `<span style="color:${s.hex};font-weight:700">${s.name}</span>`;
+    return `<span class="t${s.team}">${s.name}</span>`;
   }
   function pushFeed(div) {
     hud.feed.prepend(div);
@@ -1053,7 +1648,7 @@
   }
   function addNote(s, text) {
     const div = document.createElement('div');
-    div.innerHTML = `<span class="${s === P ? 'me' : 't' + s.team}">${s.name}</span> ${text}`;
+    div.innerHTML = `${nameTag(s)} ${text}`;
     pushFeed(div);
   }
 
@@ -1064,21 +1659,22 @@
   vmRoot.parent = camera;
   vmRoot.scaling.setAll(0.6);
   const vms = [];
-  function buildViewmodels() {
+  // Piezas de cada arma (se usan para el arma en la mano y para las armas tiradas en el piso)
+  function gunMesh(id) {
     const part = (shape, o, hex, x, y, z, rx = 0) => {
       const m = shape === 'box' ? BABYLON.MeshBuilder.CreateBox('v', o, scene) : shape === 'cyl' ? BABYLON.MeshBuilder.CreateCylinder('v', Object.assign({ tessellation: 14 }, o), scene) : BABYLON.MeshBuilder.CreateSphere('v', Object.assign({ segments: 10 }, o), scene);
       m.position.set(x, y, z); m.rotation.x = rx; m.material = plastic(hex); return m;
     };
     const R = Math.PI / 2;
-    const groups = [
-      [ // rifle de bolitas
+    const parts = {
+      rifle: () => [ // rifle de bolitas
         part('box', { width: 0.11, height: 0.13, depth: 0.55 }, '#ff9f1c', 0, 0, 0),
         part('cyl', { diameter: 0.05, height: 0.35 }, '#495057', 0, 0.02, 0.42, R),
         part('sph', { diameter: 0.17 }, '#ffd23f', 0, 0.12, -0.02),
         part('box', { width: 0.08, height: 0.16, depth: 0.08 }, '#e85d04', 0, -0.12, -0.1),
         part('box', { width: 0.09, height: 0.1, depth: 0.22 }, '#e85d04', 0, -0.02, -0.36)
       ],
-      [ // escopeta de corchos
+      shotgun: () => [ // escopeta de corchos
         part('box', { width: 0.16, height: 0.11, depth: 0.38 }, '#8d5524', 0, -0.02, -0.08),
         part('cyl', { diameter: 0.075, height: 0.55 }, '#d4a373', -0.04, 0.03, 0.3, R),
         part('cyl', { diameter: 0.075, height: 0.55 }, '#d4a373', 0.04, 0.03, 0.3, R),
@@ -1086,19 +1682,39 @@
         part('cyl', { diameter: 0.06, height: 0.06 }, '#f3d5b5', 0.04, 0.03, 0.59, R),
         part('box', { width: 0.08, height: 0.15, depth: 0.08 }, '#6f4518', 0, -0.13, -0.12)
       ],
-      [ // lanzadardos
+      dart: () => [ // lanzadardos
         part('box', { width: 0.12, height: 0.16, depth: 0.45 }, '#8338ec', 0, 0, 0),
         part('cyl', { diameter: 0.07, height: 0.4 }, '#fb5607', 0, 0.03, 0.38, R),
         part('cyl', { diameter: 0.035, height: 0.12 }, '#9ef01a', 0, 0.03, 0.62, R),
         part('box', { width: 0.04, height: 0.06, depth: 0.16 }, '#212529', 0, 0.12, 0.02),
         part('box', { width: 0.08, height: 0.16, depth: 0.08 }, '#5a189a', 0, -0.13, -0.08)
+      ],
+      pistol: () => [ // pistolita de bolitas
+        part('box', { width: 0.09, height: 0.12, depth: 0.3 }, '#06d6a0', 0, 0, 0.06),
+        part('cyl', { diameter: 0.045, height: 0.16 }, '#495057', 0, 0.02, 0.27, R),
+        part('sph', { diameter: 0.08 }, '#ffd23f', 0, 0.08, 0),
+        part('box', { width: 0.07, height: 0.17, depth: 0.08 }, '#05a77c', 0, -0.12, -0.04)
+      ],
+      nades: () => [ // bolsita de canicas
+        part('sph', { diameter: 0.2 }, '#5ec8ff', -0.1, 0, 0), part('sph', { diameter: 0.2 }, '#ff70a6', 0.1, 0, 0), part('sph', { diameter: 0.2 }, '#9ef01a', 0, 0.15, 0)
       ]
-    ];
-    groups.forEach((parts) => {
-      const m = BABYLON.Mesh.MergeMeshes(parts, true, true, undefined, false, true);
-      m.parent = vmRoot; m.renderingGroupId = 1; m.setEnabled(false);
+    }[id]();
+    return BABYLON.Mesh.MergeMeshes(parts, true, true, undefined, false, true);
+  }
+  function buildViewmodels() {
+    for (const w of ALL_GUNS) {
+      const m = gunMesh(w.id);
+      m.parent = vmRoot; m.renderingGroupId = 1; m.setEnabled(false); m.wid = w.id;
       vms.push(m);
-    });
+    }
+    // armas para tirar en el piso (más grandes) y el aro brillante que las marca
+    for (const id of ['rifle', 'shotgun', 'dart', 'nades']) {
+      const m = gunMesh(id); m.scaling.setAll(id === 'nades' ? 3 : 2.4); m.position.y = -999; addCaster(m);
+      pickupMasters[id] = m;
+    }
+    const ring = BABYLON.MeshBuilder.CreateTorus('pkRing', { diameter: 1.7, thickness: 0.14, tessellation: 28 }, scene);
+    ring.material = mat('#fff3b0', { emissive: '#ffd23f' }); ring.position.y = -999;
+    pickupMasters.ring = ring;
   }
   let vmKick = 0, vmSwap = 0;
 
@@ -1130,10 +1746,9 @@
     if (e.code === 'KeyR') startReload();
     if (e.code === 'KeyG') playerNade();
     if (e.code === 'KeyF') playerItem();
-    if (e.code === 'KeyQ') switchWeapon((P.wi + 1) % 3);
-    if (e.code === 'Digit1') switchWeapon(0);
-    if (e.code === 'Digit2') switchWeapon(1);
-    if (e.code === 'Digit3') switchWeapon(2);
+    if (e.code === 'KeyQ') switchWeapon((P.wi + 1) % P.weapons.length);
+    const dn = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
+    if (dn >= 0) switchWeapon(dn);
     if (e.code === 'KeyP' || (e.code === 'Escape' && !locked)) pauseGame();
   });
   addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -1158,11 +1773,11 @@
   addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse' || state !== 'playing' || touchMode) return;
     if ((locked || e.buttons) && Math.abs(e.movementX) < 250 && Math.abs(e.movementY) < 250) {
-      const s = SENS * cfg.sens * (aimDown && WEAPONS[P.wi].zoom ? 0.4 : aimDown ? 0.75 : 1);
+      const s = SENS * cfg.sens * (aimDown && curDef().zoom ? 0.4 : aimDown ? 0.75 : 1);
       P.yaw += e.movementX * s; P.pitch = clamp(P.pitch + e.movementY * s, -1.45, 1.45);
     }
   });
-  addEventListener('wheel', (e) => { if (state === 'playing') switchWeapon((P.wi + (e.deltaY > 0 ? 1 : 2)) % 3); }, { passive: true });
+  addEventListener('wheel', (e) => { if (state === 'playing') switchWeapon((P.wi + (e.deltaY > 0 ? 1 : P.weapons.length - 1)) % P.weapons.length); }, { passive: true });
 
   function requestLock() {
     try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* sin bloqueo de puntero */ }
@@ -1234,7 +1849,7 @@
   tbtn('bNade', () => playerNade());
   const bItem = $('bItem');
   tbtn('bItem', () => playerItem());
-  tbtn('bSwap', () => switchWeapon((P.wi + 1) % 3));
+  tbtn('bSwap', () => switchWeapon((P.wi + 1) % P.weapons.length));
   tbtn('bReload', () => startReload());
   tbtn('bCrouch', () => { P.crouchToggle = !P.crouchToggle; $('bCrouch').classList.toggle('on', P.crouchToggle); });
   tbtn('bPause', () => pauseGame());
@@ -1248,9 +1863,10 @@
   // ------------------------------------------------------------------
   // Jugador: movimiento y disparo
   // ------------------------------------------------------------------
+  const curDef = () => P.weapons[P.wi].def;
   const forwardVec = () => new V3(Math.sin(P.yaw) * Math.cos(P.pitch), -Math.sin(P.pitch), Math.cos(P.yaw) * Math.cos(P.pitch));
   function switchWeapon(i) {
-    if (i === P.wi || !P.alive) return;
+    if (i === P.wi || !P.alive || i >= P.weapons.length) return;
     P.wi = i; P.reloadT = 0; P.nextShot = Math.max(P.nextShot, gameTime + 0.25); vmSwap = 1; sfx('swap');
     updateHud(true);
   }
@@ -1311,6 +1927,12 @@
   }
 
   function updatePlayer(dt) {
+    if (!P.alive && mode === 'ffa') {
+      P.deathT -= dt;
+      showMsg((killerName ? '¡Te eliminó ' + killerName + '!' : '¡Quedaste fuera!') + '\nPuesto ' + P.place + 'º de ' + soldiers.length);
+      if (P.deathT <= 0) endMatch();
+      return;
+    }
     if (!P.alive) {
       P.deathT -= dt;
       showMsg((killerName ? '¡Te eliminó ' + killerName + '!' : '¡Te caíste al pasto!') + '\nVuelves en ' + Math.max(1, Math.ceil(P.deathT)) + '…');
@@ -1330,7 +1952,7 @@
       if (rx || ry) {
         const curve = (v) => Math.sign(v) * Math.pow(Math.abs(v), 1.7);
         const slow = hud.cross.classList.contains('on') ? 0.45 : 1; // ayuda: más lento sobre un enemigo
-        const zoom = aimDown && WEAPONS[P.wi].zoom ? 0.4 : 1;
+        const zoom = aimDown && curDef().zoom ? 0.4 : 1;
         P.yaw += curve(rx) * 3.4 * cfg.sens * slow * zoom * dt;
         P.pitch = clamp(P.pitch + curve(ry) * 2.2 * cfg.sens * slow * zoom * dt, -1.45, 1.45);
       }
@@ -1359,7 +1981,7 @@
       if (P.reloadT <= 0) { P.reloadT = 0; P.weapons[P.wi].ammo = P.weapons[P.wi].def.mag; updateHud(true); }
     }
     // disparo
-    const def = WEAPONS[P.wi];
+    const def = curDef();
     let firing = mouseDown;
     if (touchMode) {
       const onTarget = enemyInSights(def.range * 0.8);
@@ -1390,6 +2012,7 @@
   }
   // Adónde va un bot cuando no ve enemigos: al círculo, a una base enemiga, a un cruce o a cuidar la suya
   function goalCandidate(b) {
+    if (mode === 'ffa') return curMap.nav.randomPoint();
     const r = Math.random();
     if (r < 0.25) { const a = rand(0, Math.PI * 2), d = rand(4, CIRCLE_R - 3); return { x: Math.cos(a) * d, z: Math.sin(a) * d }; }
     if (r < 0.5) { // una base enemiga (nunca la propia)
@@ -1404,7 +2027,20 @@
   }
   // Adónde va un bot cuando no ve enemigos: prueba varios lugares y elige el que tenga menos compañeros cerca
   // (así el equipo se reparte por el mapa en vez de ir todos juntos o quedarse en la base)
+  // Batalla campal: si solo tiene la pistolita busca un arma; si no, sale a cazar o recorre el mapa
+  function ffaGoal(b) {
+    if (b.wdef === PISTOL) { const pk = nearPickup(b, 90, true); if (pk) return { x: pk.pos.x, y: pk.pos.y, z: pk.pos.z }; }
+    if ((b.nades || 0) === 0 && Math.random() < 0.25) { const pk = nearPickup(b, 30, false); if (pk && pk.kind === 'nades') return { x: pk.pos.x, y: pk.pos.y, z: pk.pos.z }; }
+    if (Math.random() < (aliveCount() <= 5 ? 0.75 : 0.35)) { // cuando quedan pocos, salen a buscarse
+      let best = null, bd = Infinity;
+      for (const s of soldiers) { if (s === b || !s.alive) continue; const d = Math.hypot(s.pos.x - b.pos.x, s.pos.z - b.pos.z) + Math.abs(s.pos.y - b.pos.y) * 4; if (d < bd) { bd = d; best = s; } }
+      if (best) return { x: best.pos.x, y: best.pos.y, z: best.pos.z };
+    }
+    return curMap.nav.randomPoint();
+  }
+  const goalOk = (g) => mode === 'ffa' || (walkable(g.x, g.z, 0.6) && freeSpot(g.x, g.z));
   function pickGoal(b) {
+    if (mode === 'ffa') { b.goal = ffaGoal(b); return b.goal; }
     let best = null, bestScore = Infinity;
     for (let i = 0; i < 6; i++) {
       const g = goalCandidate(b);
@@ -1421,7 +2057,7 @@
     b.goal = best || { x: 0, z: ENTRY_R };
     return b.goal;
   }
-  function inBase(b) { const h = baseCenter(b.team); return Math.abs(b.pos.x - h.x) < TABLE_HALF && Math.abs(b.pos.z - h.z) < TABLE_HALF; }
+  function inBase(b) { if (mode !== 'teams') return false; const h = baseCenter(b.team); return Math.abs(b.pos.x - h.x) < TABLE_HALF && Math.abs(b.pos.z - h.z) < TABLE_HALF; }
   // Caja sorpresa cercana que convenga ir a buscar
   function nearBox(b, maxD) {
     let best = null, bd = maxD;
@@ -1441,11 +2077,13 @@
     return [dx / d, dz / d];
   }
   function planRoute(b, goal) {
+    if (mode === 'ffa') return curMap.nav.route(b.pos.x, b.pos.y, b.pos.z, goal.x, goal.y ?? b.pos.y, goal.z);
     return findRoute(b.pos.x, b.pos.z, goal.x, goal.z);
   }
   // Freno de seguridad: los bots no caminan hacia el borde de una mesa o un puente
   function safeMove(b, mx, mz) {
     if (!mx && !mz) return [0, 0];
+    if (mode !== 'teams') return [mx, mz]; // en la Plaza y la Casa no hay vacío al que caerse
     const m = walkable(b.pos.x, b.pos.z, 0.45) ? 0.45 : 0, look = 0.9;
     const ok = (x, z) => walkable(b.pos.x + x * look, b.pos.z + z * look, m);
     if (ok(mx, mz)) return [mx, mz];
@@ -1482,7 +2120,7 @@
       if (t && hurt && b.item === 'shield') useItem(b);
       else if (t && hurt && b.retreatT <= 0 && b.shieldT <= 0 && Math.random() < 0.5) {
         let far = null, fd = -1;
-        for (let i = 0; i < 4; i++) { const g = goalCandidate(b); const d = Math.hypot(g.x - t.pos.x, g.z - t.pos.z); if (d > fd && walkable(g.x, g.z, 0.6) && freeSpot(g.x, g.z)) { fd = d; far = g; } }
+        for (let i = 0; i < 4; i++) { const g = goalCandidate(b); const d = Math.hypot(g.x - t.pos.x, g.z - t.pos.z); if (d > fd && goalOk(g)) { fd = d; far = g; } }
         const r = far && planRoute(b, far);
         if (r) { b.route = r; b.retreatT = 3.5; }
       }
@@ -1493,6 +2131,11 @@
         if (Math.random() < (t ? 0.35 : 0.7)) { const r = planRoute(b, bx.pos); if (r) { b.route = r; b.boxGoal = bx; } }
       }
       if (b.boxGoal && !b.boxGoal.active) b.boxGoal = null;
+      if (mode === 'ffa' && b.wdef === PISTOL && b.retreatT <= 0 && b.boxCd <= 0) {
+        const pk = nearPickup(b, t ? 12 : 40, true);
+        b.boxCd = 2;
+        if (pk && pk !== b.boxGoal) { const r = planRoute(b, pk.pos); if (r) { b.route = r; b.boxGoal = pk; } }
+      }
       // cuando avisan que viene la caja, algunos van hacia el centro
       if (!t && boxWarning() && !b.boxGoal && b.boxCd <= 0 && b.retreatT <= 0) {
         b.boxCd = 3;
@@ -1518,12 +2161,12 @@
         }
       }
       // a veces lanza una canica
-      if (t && b.nadeCd <= 0 && Math.random() < 0.25) {
+      if (t && b.nadeCd <= 0 && (mode === 'teams' || b.nades > 0) && Math.random() < 0.25) {
         const dx = t.pos.x - b.pos.x, dz = t.pos.z - b.pos.z, d = Math.hypot(dx, dz);
         if (d > 7 && d < 24) {
           const T = 0.9 + d / 30, dy = t.pos.y - (b.pos.y + b.h - 0.25);
           throwNade(b, new V3(dx / T + rand(-1, 1), (dy + 0.5 * GRAV * T * T) / T, dz / T + rand(-1, 1)));
-          b.nadeCd = rand(10, 18);
+          b.nadeCd = rand(10, 18); if (mode === 'ffa') b.nades--;
         }
       }
     }
@@ -1543,7 +2186,7 @@
       else { mx = nx * fwd + stx; mz = nz * fwd + stz; }
       // disparar
       if (b.reloadT > 0) { b.reloadT -= dt; if (b.reloadT <= 0) b.ammo = b.wdef.mag; }
-      else if (b.seenT > sk.reaction && Math.abs(angDiff(b.yaw, desiredYaw)) < 0.25 && gameTime >= b.nextShot && b.spawnProt <= 0) botFire(b, t);
+      else if (b.seenT > sk.reaction + (mode === 'ffa' ? 0.3 : 0) && Math.abs(angDiff(b.yaw, desiredYaw)) < 0.25 && gameTime >= b.nextShot && b.spawnProt <= 0) botFire(b, t);
     } else {
       b.target = null;
       const rd = routeDir(b);
@@ -1579,7 +2222,7 @@
     const base = aim.subtract(origin).normalize();
     const moving = Math.hypot(t.vel.x, t.vel.z) > 2 ? 1.4 : 1;
     const err = jitter(base, b.skill.spread * moving);
-    for (let i = 0; i < def.pellets; i++) spawnProjectile(b, def, origin, jitter(err, def.spread), b.skill.dmg);
+    for (let i = 0; i < def.pellets; i++) spawnProjectile(b, def, origin, jitter(err, def.spread), b.skill.dmg * (mode === 'ffa' ? 0.6 : 1));
     sfx(def.sound, volAt(origin));
     // ráfagas cortas
     b.burst = (b.burst || 0) + 1;
@@ -1595,7 +2238,14 @@
   const LOBBY_STAGE = { x: 0, y: 0.05, z: 15 }, LOBBY_YAW = Math.PI + 0.35; // quieto, mirando a la cámara
   const thirdPerson = () => cfg.cam === 'third' && state !== 'menu';
   const headPos = () => new V3(P.pos.x, P.pos.y + P.eyeH, P.pos.z);
+  let photoCam = null; // solo para sacar fotos de los mapas
   function updateCamera(dt) {
+    if (photoCam) {
+      camera.rotationQuaternion = null; camera.fov = photoCam.fov || 0.9;
+      camera.position.copyFrom(photoCam.p); camera.setTarget(photoCam.t);
+      vms.forEach((v) => v.setEnabled(false)); if (P.mesh) P.mesh.setEnabled(false);
+      return;
+    }
     if (state === 'menu') {
       // Lobby: tu soldadito quieto en el centro
       const st = LOBBY_STAGE;
@@ -1636,11 +2286,11 @@
       P.mesh.rotation.set(P.alive ? 0 : -Math.min(1, (3 - P.deathT) / 0.35) * Math.PI / 2, P.yaw, 0);
       P.mesh.scaling.y = P.h / H;
     }
-    const def = WEAPONS[P.wi];
+    const def = curDef();
     const fovT = aimDown ? (def.zoom ? 0.5 : 0.95) : 1.15;
     camera.fov += (fovT - camera.fov) * Math.min(1, 12 * dt);
     // arma
-    vms.forEach((v, i) => v.setEnabled(!thirdPerson() && i === P.wi && P.alive && !(aimDown && def.zoom && camera.fov < 0.7)));
+    vms.forEach((v) => v.setEnabled(!thirdPerson() && v.wid === def.id && P.alive && !(aimDown && def.zoom && camera.fov < 0.7)));
     vmKick = Math.max(0, vmKick - dt * 8); vmSwap = Math.max(0, vmSwap - dt * 5);
     const reloadDip = P.reloadT > 0 ? Math.sin(Math.min(1, 1 - P.reloadT / (def.reload * P.cls.reloadMul)) * Math.PI) : 0;
     vmRoot.position.set(
@@ -1679,7 +2329,11 @@
   function startMatch() {
     initAudio();
     diff = DIFFS[chosenDiff];
+    mode = cfg.mode === 'ffa' ? 'ffa' : 'teams';
+    setMap(mode === 'ffa' ? (MAPS[cfg.map] && cfg.map !== 'jardin' ? cfg.map : 'plaza') : 'jardin');
     P.cls = CLASSES[chosenClass]; P.maxHp = P.cls.hp;
+    P.weapons = mode === 'ffa' ? [{ def: PISTOL, ammo: PISTOL.mag }] : WEAPONS.map((def) => ({ def, ammo: def.mag }));
+    P.wi = 0; buildSlots(); setupScoreHud(); clearPickups();
     createBots();
     score.fill(0);
     projectiles.forEach((p) => giveMesh(p.key, p.mesh)); projectiles.length = 0;
@@ -1689,8 +2343,10 @@
     P.wi = 0; P.crouchToggle = false; $('bCrouch').classList.remove('on');
     hud.feed.innerHTML = '';
     resetBoxes();
-    gameTime = 0; P.nextShot = 0; P.reloadT = 0;
+    setupPickups();
+    gameTime = 0; P.nextShot = 0; P.reloadT = 0; lastHudKey = '';
     resume();
+    if (mode === 'ffa') showBanner(curMap.drop ? '🪂 ¡A LA PLAZA! Agarra armas del piso' : '🏠 ¡A LA CASA! Agarra armas del piso');
   }
   function resume() {
     state = 'playing';
@@ -1716,11 +2372,27 @@
     state = 'menu';
     ui.pause.classList.add('hidden'); ui.over.classList.add('hidden'); ui.hud.classList.add('hidden'); ui.touch.classList.add('hidden');
     ui.menu.classList.remove('hidden'); document.body.classList.remove('playing');
+    setMap('jardin'); clearPickups();
+    projectiles.forEach((p) => giveMesh(p.key, p.mesh)); projectiles.length = 0;
+    grenades.forEach((g) => giveMesh(g.key, g.mesh)); grenades.length = 0;
+    bots.forEach((b) => b.mesh.setEnabled(false));
     showTab('inicio');
     checkRotate();
   }
   function endMatch() {
     state = 'over';
+    if (mode === 'ffa') {
+      const won = P.alive;
+      $('overTitle').textContent = won ? '¡GANASTE LA BATALLA CAMPAL!' : `Quedaste ${P.place}º de ${soldiers.length}`;
+      $('overTitle').style.color = won ? '#e0a800' : '#3a86ff';
+      $('overStats').innerHTML = `Mapa: <b>${curMap.name}</b> · Tus eliminaciones: <b>${P.kills}</b>` + (won ? '<br>¡Fuiste el último soldadito en pie!' : killerName ? `<br>Te eliminó <b>${killerName}</b>` : '');
+      ui.over.classList.remove('hidden'); ui.touch.classList.add('hidden');
+      sfx(won ? 'win' : 'lose');
+      if (won) for (let i = 0; i < 4; i++) confetti(new V3(P.pos.x + rand(-3, 3), P.pos.y + 3, P.pos.z + rand(-3, 3)), 2);
+      if (document.pointerLockElement) document.exitPointerLock();
+      wantsLock = false; mouseDown = false;
+      return;
+    }
     const winner = score.indexOf(Math.max(...score)), won = winner === 0;
     $('overTitle').textContent = won ? '¡VICTORIA AZUL!' : 'Ganó el equipo ' + TEAM_NAME[winner];
     $('overTitle').style.color = TEAM_HEX[winner];
@@ -1736,6 +2408,27 @@
   function checkRotate() {
     ui.rotate.classList.toggle('hidden', !(touchMode && state === 'playing' && innerHeight > innerWidth));
   }
+  // Elegir modo (arriba de INICIAR) y, para la Batalla campal, la ventana de mapas
+  if (cfg.mode !== 'ffa') cfg.mode = 'teams';
+  if (cfg.map !== 'casa') cfg.map = 'plaza';
+  function showModePick() {
+    document.querySelectorAll('.modeCard').forEach((b) => b.classList.toggle('sel', b.dataset.mode === cfg.mode));
+    document.querySelectorAll('.mapCard').forEach((b) => b.classList.toggle('sel', b.dataset.map === cfg.map));
+    $('ffaImg').src = 'img/mapa-' + cfg.map + '.jpg';
+    $('ffaSub').textContent = cfg.mode === 'ffa' ? 'Mapa: ' + MAPS[cfg.map].name : 'Todos contra todos';
+  }
+  $('modePick').addEventListener('click', (e) => {
+    const b = e.target.closest('.modeCard'); if (!b) return;
+    initAudio(); sfx('swap');
+    if (b.dataset.mode === 'ffa') { showModePick(); $('mapPick').classList.remove('hidden'); return; }
+    cfg.mode = 'teams'; saveCfg(); showModePick();
+  });
+  $('mapPick').addEventListener('click', (e) => {
+    const b = e.target.closest('.mapCard');
+    if (b) { sfx('swap'); cfg.mode = 'ffa'; cfg.map = b.dataset.map; saveCfg(); showModePick(); $('mapPick').classList.add('hidden'); return; }
+    if (e.target.id === 'mapBack' || e.target === $('mapPick')) $('mapPick').classList.add('hidden');
+  });
+  showModePick();
   $('play').addEventListener('click', startMatch);
   $('resume').addEventListener('click', () => { initAudio(); resume(); });
   $('quit').addEventListener('click', toMenu);
@@ -1836,7 +2529,9 @@
   // ------------------------------------------------------------------
   // Bucle principal
   // ------------------------------------------------------------------
+  colliders = MAPS.jardin.colliders;
   buildWorld();
+  MAPS.jardin.meshes = statics.slice(); statics.length = 0;
   buildProjMasters();
   buildBoxes();
   buildViewmodels();
@@ -1853,7 +2548,8 @@
       for (const b of bots) updateBot(b, dt);
       updateProjectiles(dt);
       updateGrenades(dt);
-      updateBoxes(dt); updateShields(dt);
+      if (mode === 'teams') updateBoxes(dt); else updatePickups(dt);
+      updateShields(dt);
     } else if (state === 'over') {
       updateProjectiles(dt); updateGrenades(dt);
     }
@@ -1873,5 +2569,6 @@
 
   // Para pruebas automáticas
   window.__pa = { get dbg() { return { mouseDown, touchMode, locked, nextShot: P.nextShot, gameTime, reloadT: P.reloadT, alive: P.alive }; }, scene, P, get bots() { return bots; }, score, get state() { return state; }, startMatch, firePlayer, playerNade, findRoute, walkable, givePower, playerItem,
-    simulate(sec) { for (let t = 0; t < sec && state === 'playing'; t += 1 / 30) { gameTime += 1 / 30; for (const b of bots) updateBot(b, 1 / 30); updateProjectiles(1 / 30); updateGrenades(1 / 30); updateBoxes(1 / 30); updateShields(1 / 30); } }, get boxes() { return boxes; }, get boxDrops() { return boxDrops; } };
+    simulate(sec) { for (let t = 0; t < sec && state === 'playing'; t += 1 / 30) { gameTime += 1 / 30; for (const b of bots) updateBot(b, 1 / 30); updateProjectiles(1 / 30); updateGrenades(1 / 30); if (mode === 'teams') updateBoxes(1 / 30); else updatePickups(1 / 30); updateShields(1 / 30); } }, get boxes() { return boxes; }, get boxDrops() { return boxDrops; },
+    setMap, MAPS, camera, photo(p, t, fov) { photoCam = p ? { p: new V3(...p), t: new V3(...t), fov } : null; }, get pickups() { return pickups; }, get mode() { return mode; }, cfg, get soldiers() { return soldiers; } };
 })();

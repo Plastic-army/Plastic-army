@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Plastic Army</title>
-  <meta name="description" content="Plastic Army: soldaditos de juguete en un jardín: cuatro equipos, cuatro mesas. Prototipo jugable.">
+  <meta name="description" content="Plastic Army: soldaditos de juguete. Por equipos en el Jardín o Batalla campal en la Plaza y la Casa. Prototipo jugable.">
   <meta name="theme-color" content="#3a86ff">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -116,10 +116,30 @@
       </nav>
     </div>
     <section id="tabInicio" class="tabpage">
+      <div id="modePick">
+        <div class="mpTitle">ELEGIR MODO</div>
+        <div class="mpCards">
+          <button class="modeCard" data-mode="teams"><img src="img/modo-equipos.jpg" alt=""><span>Por equipos<small>Jardín · 4 equipos de 8</small></span></button>
+          <button class="modeCard" data-mode="ffa"><img id="ffaImg" src="img/mapa-plaza.jpg" alt=""><span>Batalla campal<small id="ffaSub">Todos contra todos</small></span></button>
+        </div>
+      </div>
       <button id="play" class="start">INICIAR</button>
     </section>
     <section id="tabTienda" class="tabpage blue hidden"><div class="na">No disponible</div></section>
     <section id="tabMisiones" class="tabpage blue hidden"><div class="na">No disponible</div></section>
+  </div>
+
+  <!-- Ventana para elegir el mapa de la Batalla campal -->
+  <div id="mapPick" class="overlay hidden">
+    <div class="panel">
+      <h2>Elegir mapa</h2>
+      <p class="sub">Batalla campal: todos contra todos. Apareces en un lugar al azar y agarras las armas del piso con solo pasar por encima. ¡El último en pie gana!</p>
+      <div class="mapCards">
+        <button class="mapCard" data-map="plaza"><img src="img/mapa-plaza.jpg" alt=""><b>Plaza</b><small>Al aire libre, con pasto, fuente y juegos · 16 jugadores</small></button>
+        <button class="mapCard" data-map="casa"><img src="img/mapa-casa.jpg" alt=""><b>Casa</b><small>Casa grande de 2 pisos con patio · 12 jugadores</small></button>
+      </div>
+      <button id="mapBack" class="small">Volver</button>
+    </div>
   </div>
 
   <div id="pause" class="overlay hidden">
@@ -188,6 +208,7 @@
         <p class="help pc-only">WASD moverse · Ratón apuntar · Clic disparar · Clic derecho mirilla · 1/2/3 o rueda cambiar arma · R recargar · G canica · F usar caja (escudo o mega granada) · Espacio saltar · Shift correr · C agacharse · Esc pausa</p>
         <p class="help touch-only">Joystick izquierdo: moverte · Joystick derecho: apuntar. ¡Disparas solo cuando la mira toca a un enemigo!</p>
         <p class="help">4 equipos de 8: <b class="blue">AZUL</b> (el tuyo), <b class="red">ROJO</b>, <b class="green">VERDE</b> y <b class="yellow">AMARILLO</b>. 3 veces por partida aparece una caja sorpresa en la mesa del centro. El primer equipo en llegar a <b>50</b> eliminaciones gana. ¡Cuidado con caerte al pasto!</p>
+        <p class="help"><b>Batalla campal</b>: todos contra todos, sin volver a aparecer. Empiezas con la pistolita en un lugar al azar y agarras armas y canicas del piso con solo pasar por encima. Gana el último en pie.</p>
       </div>
       <button id="install" class="small hidden">Instalar el juego</button>
       <button id="settingsDone" class="cta">Listo</button>
