@@ -22,7 +22,7 @@
   scene.clearColor = new C4(SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b, 1);
   scene.ambientColor = new C3(0.35, 0.35, 0.35);
   scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
-  scene.fogStart = 160; scene.fogEnd = 460; scene.fogColor = SKY_COLOR;
+  scene.fogStart = 220; scene.fogEnd = 600; scene.fogColor = SKY_COLOR;
   scene.skipPointerMovePicking = true;
   scene.detachControl(); // los controles son nuestros; Babylon no debe tocar los clics
 
@@ -156,7 +156,7 @@
   // puente directo a la mesa redonda del centro y puentes a las bases vecinas (pasando
   // por los ladrillos de las esquinas). Si te caes al pasto, quedas eliminado.
   // ------------------------------------------------------------------
-  const BASE_D = 44, TABLE_HALF = 12, BRIDGE_W = 7, RAIL = 0.3, CIRCLE_R = 16, CORNER_HALF = 5, ENTRY_R = 13;
+  const BASE_D = 70, TABLE_HALF = 15, BRIDGE_W = 7, RAIL = 0.3, CIRCLE_R = 22, CORNER_HALF = 6, ENTRY_R = 18;
   const GROUND_Y = -30;
   const TEAM_DIR = [[0, -1], [0, 1], [1, 0], [-1, 0]]; // Azul: sur, Rojo: norte, Verde: este, Amarillo: oeste
   const TEAM_PLACE = ['Sur', 'Norte', 'Este', 'Oeste'];
@@ -264,7 +264,7 @@
 
     // árboles lejanos
     for (let i = 0; i < 14; i++) {
-      const a = (i / 14) * Math.PI * 2 + rand(-0.15, 0.15), r = rand(175, 250);
+      const a = (i / 14) * Math.PI * 2 + rand(-0.15, 0.15), r = rand(210, 290);
       const x = Math.cos(a) * r, z = Math.sin(a) * r, th = rand(70, 110);
       cyl('trunk', rand(7, 11), th, x, GROUND_Y, z, mat('#8d5a34'), { collide: false, shadow: false, tess: 12 });
       for (let k = 0; k < 3; k++) {
@@ -295,15 +295,15 @@
       const ctr = BABYLON.MeshBuilder.CreateSphere('fc', { diameter: 2.6, segments: 8 }, scene);
       ctr.position.set(x, top + 0.3, z); ctr.scaling.y = 0.6; ctr.material = plastic('#ffd23f'); finishStatic(ctr, false);
     };
-    [[24, 24, 22], [-24, -24, 21], [-24, 24, 20], [24, -24, 23], [70, 30, 30], [-70, -30, 29], [30, -70, 31], [-30, 70, 28], [66, 66, 27], [-66, -66, 26]]
+    [[38, 38, 22], [-38, -38, 21], [-38, 38, 20], [38, -38, 23], [104, 45, 30], [-104, -45, 29], [45, -104, 31], [-45, 104, 28], [100, 100, 27], [-100, -100, 26]]
       .forEach(([x, z, hh], i) => flower(x, z, hh, ['#ff70a6', '#ffffff', '#c77dff', '#ff9f1c'][i % 4]));
-    for (const [x, z] of [[-92, 20], [92, -20], [20, 94], [-20, -94], [86, 86], [-88, -86]]) {
+    for (const [x, z] of [[-122, 30], [122, -30], [30, 124], [-30, -124], [112, 112], [-114, -112]]) {
       const b = BABYLON.MeshBuilder.CreateSphere('bush', { diameter: rand(22, 30), segments: 10 }, scene);
       b.position.set(x, GROUND_Y + 6, z); b.scaling.y = 0.75; b.material = mat('#4e9f3d'); finishStatic(b, false);
     }
     // una pelota gigante tirada en el pasto
     const ball = BABYLON.MeshBuilder.CreateSphere('ball', { diameter: 26, segments: 20 }, scene);
-    ball.position.set(-34, GROUND_Y + 13, 92);
+    ball.position.set(-52, GROUND_Y + 13, 118);
     const bm = new BABYLON.StandardMaterial('ballMat', scene); bm.diffuseTexture = stripeTexture(['#ff006e', '#ffffff', '#3a86ff', '#ffffff', '#ffd23f', '#ffffff'], 6); bm.specularColor = new C3(0.4, 0.4, 0.4);
     ball.material = bm; finishStatic(ball, false);
 
@@ -342,7 +342,7 @@
     }
     cyl('umbPole', 0.8, 16, 0, 0, 0, '#f1f3f5', { tess: 12 });
     cyl('umbBase', 4, 0.8, 0, 0, 0, '#495057');
-    const canopy = BABYLON.MeshBuilder.CreateCylinder('canopy', { diameterTop: 0.6, diameterBottom: 24, height: 4.5, tessellation: 16 }, scene);
+    const canopy = BABYLON.MeshBuilder.CreateCylinder('canopy', { diameterTop: 0.6, diameterBottom: 30, height: 5, tessellation: 16 }, scene);
     canopy.position.set(0, 14.5, 0);
     const cm = new BABYLON.StandardMaterial('canopyMat', scene); cm.diffuseTexture = stripeTexture(['#ff4d6d', '#ffffff'], 16); cm.specularColor = new C3(0.2, 0.2, 0.2); cm.backFaceCulling = false;
     canopy.material = cm; finishStatic(canopy);
@@ -351,9 +351,12 @@
       box('block', 2.4, hh, 2.4, sx * 4.2, 0, sz * 4.2, col);
     });
     [[0.38, 0.92], [-0.92, 0.38], [-0.38, -0.92], [0.92, -0.38]].forEach(([x, z], i) => {
-      box('cBlock', 2, 1.2, 2, x * 12, 0, z * 12, ['#3a86ff', '#ef233c', '#2fb344', '#ffbe0b'][i]);
+      box('cBlock', 2, 1.2, 2, x * 16.5, 0, z * 16.5, ['#3a86ff', '#ef233c', '#2fb344', '#ffbe0b'][i]);
     });
-    [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(([x, z]) => BOX_SPOTS.push({ x: x * 6.6, z: z * 9 }));
+    // más cobertura en la mesa redonda (ahora es más grande)
+    [[1, 0, 2.2, '#ffd23f'], [0, 1, 1.2, '#3a86ff'], [-1, 0, 2.2, '#ef233c'], [0, -1, 1.2, '#2fb344']].forEach(([sx, sz, hh, col]) => box('mBlock', 2.2, hh, 2.2, sx * 8.5, 0, sz * 8.5, col));
+    // las cajas sorpresa aparecen solo acá, en el medio
+    for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + Math.PI / 4; BOX_SPOTS.push({ x: Math.cos(a) * 10, z: Math.sin(a) * 10 }); }
 
     // --- Puentes anchos (reglas) con barandas de lápiz y cosas para cubrirse ---
     const railMats = ['#ffbe0b', '#fb5607', '#8338ec', '#06d6a0'];
@@ -391,7 +394,6 @@
         const hh = tall ? 2.3 : 1.25;
         box('bCover', alongX ? 1.8 : 1.5, hh, alongX ? 1.5 : 1.8, bxp, 0, bzp, coverCols[(i + Math.abs(Math.round(ax + az))) % coverCols.length]);
       }
-      BOX_SPOTS.push({ x: (ax + bx) / 2, z: (az + bz) / 2 });
       // zona caminable (un poco más larga para que empalme con lo que une)
       const r = alongX ? addRect(x0 - 1.5, z0 + RAIL, x1 + 1.5, z1 - RAIL, nodes) : addRect(x0 + RAIL, z0 - 1.5, x1 - RAIL, z1 + 1.5, nodes);
       BRIDGE_REGIONS.push(r);
@@ -404,7 +406,6 @@
       cyl('brickLeg', 2, 28, x, GROUND_Y, z, '#adb5bd', { collide: false, shadow: false, tess: 10 });
       box('cornerWall', 2, 2.3, 2, x + kx * 2.6, 0, z + kz * 2.6, '#ffd23f'); // refugio en la punta de afuera
       addRect(x - CORNER_HALF, z - CORNER_HALF, x + CORNER_HALF, z + CORNER_HALF, [4 + j]);
-      BOX_SPOTS.push({ x: x - kx * 1.5, z: z - kz * 1.5 });
     });
     for (let t = 0; t < TEAMS; t++) {
       const [dx, dz] = TEAM_DIR[t], cx = dx * BASE_D, cz = dz * BASE_D;
@@ -465,16 +466,16 @@
     cloth.diffuseTexture.uScale = cloth.diffuseTexture.vScale = 3; cloth.specularColor = C3.Black();
     box('cloth', H2 * 2 - 1.5, 0.05, H2 * 2 - 1.5, cx, 0, cz, cloth, { collide: false, shadow: false });
     // bandera en el borde de afuera
-    const [fx, fz] = L(0, 10.5);
+    const [fx, fz] = L(0, H2 - 1.5);
     cyl('flagPole', 0.4, 10, fx, 0, fz, '#f1f3f5', { tess: 10 });
     const flag = BABYLON.MeshBuilder.CreateBox('flag', { width: dz ? 4 : 0.12, height: 2.6, depth: dz ? 0.12 : 4 }, scene);
     flag.position.set(fx + (dz ? 2.1 : 0), 8.6, fz + (dz ? 0 : 2.1)); flag.material = plastic(team); finishStatic(flag);
     // cosas para cubrirse (dejando libres los pasillos hacia los tres puentes)
     for (const s of [-1, 1]) {
-      const [lx, lz] = L(s * 7.5, -7.5);
+      const [lx, lz] = L(s * 9, -9);
       box('lunchbox', 4.5, 2.6, 4.5, lx, 0, lz, team);
       box('lunchLid', 4.7, 0.4, 4.7, lx, 2.6, lz, TEAM_LIGHT[t], { collide: false });
-      const [ux, uz] = L(s * 7.5, 7.5);
+      const [ux, uz] = L(s * 9, 9);
       cyl('cup', 3, 4, ux, 0, uz, s < 0 ? '#ffffff' : TEAM_LIGHT[t]);
     }
     const [px, pz] = L(-4, 5);
@@ -690,7 +691,7 @@
     // en la parte de afuera de la mesa de su equipo
     const [dx, dz] = TEAM_DIR[team], c = baseCenter(team);
     for (let i = 0; i < 40; i++) {
-      const u = rand(-10, 10), v = rand(2, 10.5);
+      const u = rand(-(TABLE_HALF - 2), TABLE_HALF - 2), v = rand(2, TABLE_HALF - 1.5);
       const x = c.x - u * dz + v * dx, z = c.z + u * dx + v * dz;
       if (!freeSpot(x, z)) continue;
       if (soldiers.some((s) => s.alive && s !== undefined && Math.hypot(s.pos.x - x, s.pos.z - z) < 1.4)) continue;
@@ -859,7 +860,7 @@
   // ------------------------------------------------------------------
   // Cajas sorpresa: escudo, mega granada o 200 de vida (los bots también las agarran)
   // ------------------------------------------------------------------
-  const BOX_COUNT = 3, BOX_RESPAWN = 40, SHIELD_TIME = 7, MEGA_R = 14, HEAL_HP = 200;
+  const BOX_MAX = 3, BOX_FIRST = 20, BOX_GAP = 30, BOX_WARN = 5, SHIELD_TIME = 7, MEGA_R = 14, HEAL_HP = 200;
   const POWERS = {
     shield: { name: 'Escudo', icon: '🛡', color: '#5ec8ff' },
     mega: { name: 'Mega granada', icon: '💣', color: '#ff4d6d' },
@@ -876,33 +877,48 @@
       c.strokeStyle = '#2b2d42'; c.lineWidth = 10; c.strokeText('?', w / 2, h / 2 + 6); c.fillText('?', w / 2, h / 2 + 6);
     });
     giftMat.emissiveColor = new C3(0.45, 0.35, 0.1); giftMat.specularColor = new C3(0.4, 0.4, 0.4);
-    boxMaster = BABYLON.MeshBuilder.CreateBox('giftBox', { size: 1.1 }, scene);
+    boxMaster = BABYLON.MeshBuilder.CreateBox('giftBox', { size: 1.5 }, scene);
     boxMaster.material = giftMat; boxMaster.position.y = -999; addCaster(boxMaster);
     shieldMat = new BABYLON.StandardMaterial('shieldMat', scene);
     shieldMat.diffuseColor = C3.FromHexString('#5ec8ff'); shieldMat.emissiveColor = C3.FromHexString('#2a8fd6');
     shieldMat.alpha = 0.28; shieldMat.specularColor = new C3(1, 1, 1); shieldMat.backFaceCulling = false;
-    for (let i = 0; i < BOX_COUNT; i++) {
-      const m = i === 0 ? boxMaster : boxMaster.clone('giftBox' + i);
-      boxes.push({ mesh: m, active: false, t: 0, pos: new V3(), spin: rand(0, 6) });
-    }
+    boxes.push({ mesh: boxMaster, active: false, pos: new V3(), spin: 0 });
+    boxMaster.setEnabled(false);
   }
+  // Una caja por vez, siempre en la mesa del centro, con aviso 5 s antes. 3 por partida.
+  let boxDrops = 0, dropT = BOX_FIRST;
+  const boxWarnEl = $('boxwarn');
+  const boxWarning = () => !boxes[0].active && boxDrops < BOX_MAX && dropT <= BOX_WARN;
   function placeBox(bx) {
-    const free = BOX_SPOTS.filter((p) => !boxes.some((o) => o !== bx && o.active && Math.hypot(o.pos.x - p.x, o.pos.z - p.z) < 8) &&
-      !soldiers.some((s) => s.alive && Math.hypot(s.pos.x - p.x, s.pos.z - p.z) < 4));
+    const free = BOX_SPOTS.filter((p) => !soldiers.some((s) => s.alive && Math.hypot(s.pos.x - p.x, s.pos.z - p.z) < 3));
     const p = pick(free.length ? free : BOX_SPOTS);
     bx.pos.set(p.x, 0, p.z); bx.active = true; bx.mesh.setEnabled(true);
+    boxDrops++;
+    confetti(new V3(p.x, 1.5, p.z), 1.5); sfx('clink', 1);
+    showBanner('📦 ¡CAJA SORPRESA EN EL CENTRO!');
   }
-  function resetBoxes() { boxes.forEach((b) => (b.active = false)); boxes.forEach(placeBox); }
+  function resetBoxes() {
+    boxes.forEach((b) => { b.active = false; b.mesh.setEnabled(false); });
+    boxDrops = 0; dropT = BOX_FIRST; showBoxWarn('');
+  }
+  function showBoxWarn(t) { if (boxWarnEl.textContent !== t) { boxWarnEl.textContent = t; boxWarnEl.classList.toggle('hidden', !t); } }
   function updateBoxes(dt) {
+    const bx0 = boxes[0];
+    if (!bx0.active && boxDrops < BOX_MAX) {
+      dropT -= dt;
+      if (dropT <= 0) { showBoxWarn(''); placeBox(bx0); }
+      else if (dropT <= BOX_WARN) showBoxWarn(`📦 Caja sorpresa ${boxDrops + 1} de ${BOX_MAX} en el centro en ${Math.ceil(dropT)}…`);
+      else showBoxWarn('');
+    } else if (!bx0.active) showBoxWarn('');
     for (const bx of boxes) {
-      if (!bx.active) { bx.t -= dt; if (bx.t <= 0) placeBox(bx); continue; }
+      if (!bx.active) continue;
       bx.spin += dt;
-      bx.mesh.position.set(bx.pos.x, 0.9 + Math.sin(bx.spin * 2.5) * 0.18, bx.pos.z);
+      bx.mesh.position.set(bx.pos.x, 1.1 + Math.sin(bx.spin * 2.5) * 0.2, bx.pos.z);
       bx.mesh.rotation.y = bx.spin * 1.4;
       for (const s of soldiers) {
-        if (!s.alive || Math.hypot(s.pos.x - bx.pos.x, s.pos.z - bx.pos.z) > 1.3 || Math.abs(s.pos.y - bx.pos.y) > 2) continue;
+        if (!s.alive || Math.hypot(s.pos.x - bx.pos.x, s.pos.z - bx.pos.z) > 1.5 || Math.abs(s.pos.y - bx.pos.y) > 2) continue;
         givePower(s, pick(Object.keys(POWERS)));
-        bx.active = false; bx.t = BOX_RESPAWN; bx.mesh.setEnabled(false);
+        bx.active = false; dropT = BOX_GAP; bx.mesh.setEnabled(false);
         confetti(bx.mesh.position, 1.2);
         break;
       }
@@ -1360,7 +1376,7 @@
   function angDiff(a, b) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
   function findTarget(b) {
     const eye = eyeOf(b);
-    let best = null, bestD = 60;
+    let best = null, bestD = 70;
     for (const s of soldiers) {
       if (!s.alive || s.team === b.team) continue;
       const dx = s.pos.x - b.pos.x, dz = s.pos.z - b.pos.z, d = Math.hypot(dx, dz);
@@ -1378,7 +1394,7 @@
     if (r < 0.25) { const a = rand(0, Math.PI * 2), d = rand(4, CIRCLE_R - 3); return { x: Math.cos(a) * d, z: Math.sin(a) * d }; }
     if (r < 0.5) { // una base enemiga (nunca la propia)
       const t = pick([0, 1, 2, 3].filter((k) => k !== b.team)), c = baseCenter(t);
-      return { x: c.x + rand(-9, 9), z: c.z + rand(-9, 9) };
+      return { x: c.x + rand(-(TABLE_HALF - 3), TABLE_HALF - 3), z: c.z + rand(-(TABLE_HALF - 3), TABLE_HALF - 3) };
     }
     if (r < 0.7) { const [kx, kz] = pick(CORN); return { x: kx * BASE_D + rand(-3, 3), z: kz * BASE_D + rand(-3, 3) }; }
     // un punto de algún puente
@@ -1471,12 +1487,17 @@
         if (r) { b.route = r; b.retreatT = 3.5; }
       }
       // ¿hay una caja sorpresa cerca? a veces va a buscarla
-      const bx = b.retreatT <= 0 && nearBox(b, t ? 9 : 26);
+      const bx = b.retreatT <= 0 && nearBox(b, t ? 14 : 60);
       if (bx && b.boxCd <= 0 && (!b.boxGoal || b.boxGoal !== bx)) {
         b.boxCd = 2.5;
         if (Math.random() < (t ? 0.35 : 0.7)) { const r = planRoute(b, bx.pos); if (r) { b.route = r; b.boxGoal = bx; } }
       }
       if (b.boxGoal && !b.boxGoal.active) b.boxGoal = null;
+      // cuando avisan que viene la caja, algunos van hacia el centro
+      if (!t && boxWarning() && !b.boxGoal && b.boxCd <= 0 && b.retreatT <= 0) {
+        b.boxCd = 3;
+        if (Math.random() < 0.4) { const sp = pick(BOX_SPOTS), r = planRoute(b, { x: sp.x * 0.7, z: sp.z * 0.7 }); if (r) b.route = r; }
+      }
       // los "atacantes" siguen su camino mientras disparan; los demás buscan cómo llegar al enemigo
       if (b.retreatT > 0 || b.boxGoal) { /* sigue con su camino */ }
       else if (t && !b.pusher && !inBase(b)) b.route = planRoute(b, t.pos) || [];
@@ -1576,7 +1597,7 @@
   function updateCamera(dt) {
     if (state === 'menu') {
       menuAngle += dt * 0.12;
-      camera.position.set(Math.sin(menuAngle) * 92, 42, Math.cos(menuAngle) * 92);
+      camera.position.set(Math.sin(menuAngle) * 135, 62, Math.cos(menuAngle) * 135);
       camera.setTarget(new V3(0, 1, 0));
       vms.forEach((v) => v.setEnabled(false));
       if (P.mesh) P.mesh.setEnabled(false);
@@ -1831,5 +1852,5 @@
 
   // Para pruebas automáticas
   window.__pa = { get dbg() { return { mouseDown, touchMode, locked, nextShot: P.nextShot, gameTime, reloadT: P.reloadT, alive: P.alive }; }, scene, P, get bots() { return bots; }, score, get state() { return state; }, startMatch, firePlayer, playerNade, findRoute, walkable, givePower, playerItem,
-    simulate(sec) { for (let t = 0; t < sec && state === 'playing'; t += 1 / 30) { gameTime += 1 / 30; for (const b of bots) updateBot(b, 1 / 30); updateProjectiles(1 / 30); updateGrenades(1 / 30); updateBoxes(1 / 30); updateShields(1 / 30); } }, get boxes() { return boxes; } };
+    simulate(sec) { for (let t = 0; t < sec && state === 'playing'; t += 1 / 30) { gameTime += 1 / 30; for (const b of bots) updateBot(b, 1 / 30); updateProjectiles(1 / 30); updateGrenades(1 / 30); updateBoxes(1 / 30); updateShields(1 / 30); } }, get boxes() { return boxes; }, get boxDrops() { return boxDrops; } };
 })();
