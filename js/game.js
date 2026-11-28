@@ -16,9 +16,8 @@
   const canvas = $('game');
   let touchMode = window.matchMedia('(pointer: coarse)').matches;
   const engine = new BABYLON.Engine(canvas, true, { stencil: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' }, true);
-  engine.setHardwareScalingLevel(1 / Math.min(window.devicePixelRatio || 1, touchMode ? 1.5 : 2));
   const scene = new BABYLON.Scene(engine);
-  const SKY_COLOR = C3.FromHexString('#a9dcff');
+  const SKY_COLOR = C3.FromHexString('#cfe8ff'); // color del horizonte (la niebla se funde con el cielo)
   scene.clearColor = new C4(SKY_COLOR.r, SKY_COLOR.g, SKY_COLOR.b, 1);
   scene.ambientColor = new C3(0.35, 0.35, 0.35);
   scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
@@ -30,19 +29,160 @@
   camera.minZ = 0.05; camera.maxZ = 900; camera.fov = 1.15;
   camera.inputs.clear();
 
+  const SUN_DIR = new V3(-0.45, -1, -0.35).normalize();
   const hemi = new BABYLON.HemisphericLight('hemi', new V3(0.2, 1, -0.3), scene);
-  hemi.intensity = 0.78; hemi.groundColor = new C3(0.42, 0.5, 0.38);
-  const sun = new BABYLON.DirectionalLight('sun', new V3(-0.45, -1, -0.35), scene);
-  sun.position = new V3(90, 140, 90); sun.intensity = 0.85; sun.diffuse = C3.FromHexString('#fff4dd');
-  let shadowGen = null;
-  if (!touchMode) {
-    shadowGen = new BABYLON.ShadowGenerator(2048, sun);
-    shadowGen.usePercentageCloserFiltering = true;
-    shadowGen.bias = 0.0015; shadowGen.normalBias = 0.02;
-    sun.shadowMinZ = 1; sun.shadowMaxZ = 400;
+  hemi.intensity = 0.55; hemi.diffuse = C3.FromHexString('#dceeff'); hemi.groundColor = new C3(0.36, 0.42, 0.3);
+  hemi.specular = C3.Black();
+  const sun = new BABYLON.DirectionalLight('sun', SUN_DIR.clone(), scene);
+  sun.position = new V3(90, 140, 90); sun.intensity = 1.05; sun.diffuse = C3.FromHexString('#fff1d6');
+
+  // ------------------------------------------------------------------
+  // Calidad de gráficos: Baja / Media / Alta (se elige en la tuerca y se guarda en el aparato)
+  // ------------------------------------------------------------------
+  const GFX = {
+    low: { dpr: 1, shadow: 0, bump: false, gloss: false, post: false },
+    medium: { dpr: 1.5, shadow: 1024, shadowSize: 70, bump: true, gloss: true, post: false },
+    high: { dpr: 2, shadow: 2048, shadowSize: 110, bump: true, gloss: true, post: true }
+  };
+  let gfxLevel = (() => {
+    try { const g = JSON.parse(localStorage.getItem('plasticArmy.settings.v1') || '{}').gfx; if (GFX[g]) return g; } catch (e) { /* nada */ }
+    return touchMode ? 'medium' : 'high';
+  })();
+  let shadowGen = null, pipeline = null, ssao = null;
+  const casterSet = new Set();
+  const addCaster = (m) => { casterSet.add(m); if (shadowGen) shadowGen.addShadowCaster(m); };
+  const removeCaster = (m) => { casterSet.delete(m); if (shadowGen) shadowGen.removeShadowCaster(m); };
+
+  // Colores de cine: curva de tonos que respeta los colores de juguete, un poco más de contraste y viñeta suave
+  const ipc = scene.imageProcessingConfiguration;
+  ipc.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_KHR_PBR_NEUTRAL;
+  ipc.exposure = 0.96; ipc.contrast = 1.28;
+  ipc.colorCurvesEnabled = true;
+  ipc.colorCurves = new BABYLON.ColorCurves(); ipc.colorCurves.globalSaturation = 28;
+  ipc.vignetteWeight = 1.6; ipc.vignetteStretch = 0.4; ipc.vignetteColor = new C4(0.05, 0.08, 0.15, 0);
+  ipc.vignetteCameraFov = 1.15;
+
+  // Cielo: degradé de azul fuerte arriba a celeste claro en el horizonte, con un sol que brilla
+  const skyTex = new BABYLON.DynamicTexture('skyTex', { width: 4, height: 512 }, scene, false);
+  {
+    const c = skyTex.getContext(), g = c.createLinearGradient(0, 0, 0, 512);
+    // (en la esfera el dibujo queda al revés: abajo del lienzo = arriba del cielo)
+    g.addColorStop(1, '#2a74d8'); g.addColorStop(0.75, '#4f9cec'); g.addColorStop(0.56, '#a9d4fb'); g.addColorStop(0.5, '#d6ecff'); g.addColorStop(0, '#bcd9ee');
+    c.fillStyle = g; c.fillRect(0, 0, 4, 512); skyTex.update();
   }
-  const casters = [];
-  const addCaster = (m) => { if (shadowGen) shadowGen.addShadowCaster(m); };
+  skyTex.wrapU = skyTex.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
+  const skyMat = new BABYLON.StandardMaterial('skyMat', scene);
+  skyMat.emissiveTexture = skyTex; skyMat.disableLighting = true; skyMat.backFaceCulling = false; skyMat.fogEnabled = false;
+  skyMat.diffuseColor = skyMat.specularColor = C3.Black();
+  const skyDome = BABYLON.MeshBuilder.CreateSphere('sky', { diameter: 1500, segments: 24, sideOrientation: BABYLON.Mesh.BACKSIDE }, scene);
+  skyDome.material = skyMat; skyDome.infiniteDistance = true; skyDome.isPickable = false; skyDome.applyFog = false;
+  skyDome.rotation.y = 0;
+  const sunGlowTex = new BABYLON.DynamicTexture('sunGlow', { width: 256, height: 256 }, scene, true);
+  {
+    const c = sunGlowTex.getContext(), g = c.createRadialGradient(128, 128, 0, 128, 128, 128);
+    g.addColorStop(0, 'rgba(255,255,245,1)'); g.addColorStop(0.12, 'rgba(255,250,225,1)'); g.addColorStop(0.2, 'rgba(255,240,200,0.55)'); g.addColorStop(0.5, 'rgba(255,230,180,0.12)'); g.addColorStop(1, 'rgba(255,230,180,0)');
+    c.fillStyle = g; c.fillRect(0, 0, 256, 256); sunGlowTex.update(); sunGlowTex.hasAlpha = true;
+  }
+  const sunMat = new BABYLON.StandardMaterial('sunMat', scene);
+  sunMat.emissiveTexture = sunGlowTex; sunMat.opacityTexture = sunGlowTex; sunMat.disableLighting = true; sunMat.fogEnabled = false;
+  sunMat.diffuseColor = sunMat.specularColor = C3.Black();
+  const sunDisc = BABYLON.MeshBuilder.CreatePlane('sunDisc', { size: 170 }, scene);
+  sunDisc.material = sunMat; sunDisc.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL; sunDisc.infiniteDistance = true; sunDisc.isPickable = false;
+  sunDisc.position = SUN_DIR.scale(-680);
+
+  // Reflejo del cielo en el plástico (se dibuja una sola vez): los soldaditos y juguetes brillan como plástico de verdad
+  let skyCube = null;
+  function getSkyCube() {
+    if (skyCube) return skyCube;
+    const probe = new BABYLON.ReflectionProbe('skyProbe', 128, scene, true, false);
+    probe.renderList.push(skyDome); probe.refreshRate = BABYLON.RenderTargetTexture.REFRESHRATE_RENDER_ONCE;
+    probe.attachToMesh(null); probe.position = new V3(0, 0, 0);
+    skyCube = probe.cubeTexture;
+    return skyCube;
+  }
+  const glossMats = [];
+  const glossFresnel = (() => { const f = new BABYLON.FresnelParameters(); f.bias = 0.05; f.power = 3; f.leftColor = new C3(0.28, 0.32, 0.38); f.rightColor = C3.Black(); return f; })();
+  function setGloss(m, on) {
+    m.reflectionTexture = on ? getSkyCube() : null;
+    m.reflectionFresnelParameters = on ? glossFresnel : null;
+  }
+
+  // Relieve (mapa de normales) sacado del mismo dibujo de la textura: las vetas de la madera y el pasto se notan con la luz
+  const bumpMats = [];
+  function addBump(m, strength = 2) {
+    const src = m.diffuseTexture; if (!src || !src.getContext) return m;
+    const { width: w, height: h } = src.getSize();
+    const data = src.getContext().getImageData(0, 0, w, h).data;
+    const lum = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) lum[i] = (data[i * 4] * 0.3 + data[i * 4 + 1] * 0.59 + data[i * 4 + 2] * 0.11) / 255;
+    const nt = new BABYLON.DynamicTexture(m.name + 'N', { width: w, height: h }, scene, true);
+    const ctx = nt.getContext(), out = ctx.createImageData(w, h);
+    const L = (x, y) => lum[((y + h) % h) * w + ((x + w) % w)];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const dx = (L(x + 1, y) - L(x - 1, y)) * strength, dy = (L(x, y + 1) - L(x, y - 1)) * strength;
+      const inv = 1 / Math.sqrt(dx * dx + dy * dy + 1), o = (y * w + x) * 4;
+      out.data[o] = (-dx * inv * 0.5 + 0.5) * 255; out.data[o + 1] = (dy * inv * 0.5 + 0.5) * 255; out.data[o + 2] = (inv * 0.5 + 0.5) * 255; out.data[o + 3] = 255;
+    }
+    ctx.putImageData(out, 0, 0); nt.update();
+    nt.uScale = src.uScale; nt.vScale = src.vScale; nt.wrapU = src.wrapU; nt.wrapV = src.wrapV;
+    m.__bump = nt; bumpMats.push(m);
+    if (GFX[gfxLevel].bump) m.bumpTexture = nt;
+    return m;
+  }
+
+  function applyGraphics(level) {
+    if (!GFX[level]) level = 'medium';
+    gfxLevel = level;
+    const q = GFX[level];
+    engine.setHardwareScalingLevel(1 / Math.min(window.devicePixelRatio || 1, q.dpr));
+    // Sombras que siguen a la cámara: nítidas cerca del jugador en vez de borrosas en todo el mapa
+    if (shadowGen && (!q.shadow || shadowGen.getShadowMap().getSize().width !== q.shadow)) { shadowGen.dispose(); shadowGen = null; }
+    if (q.shadow && !shadowGen) {
+      shadowGen = new BABYLON.ShadowGenerator(q.shadow, sun);
+      shadowGen.usePercentageCloserFiltering = true;
+      shadowGen.filteringQuality = level === 'high' ? BABYLON.ShadowGenerator.QUALITY_HIGH : BABYLON.ShadowGenerator.QUALITY_LOW;
+      shadowGen.bias = 0.0008; shadowGen.normalBias = 0.015; shadowGen.darkness = 0.25;
+      sun.autoUpdateExtends = false; sun.autoCalcShadowZBounds = false;
+      sun.shadowMinZ = 1; sun.shadowMaxZ = 420;
+      for (const m of casterSet) if (!m.isDisposed()) shadowGen.addShadowCaster(m);
+    }
+    if (q.shadow) sun.shadowFrustumSize = q.shadowSize;
+    // Relieve y brillo del plástico
+    bumpMats.forEach((m) => { m.bumpTexture = q.bump ? m.__bump : null; });
+    glossMats.forEach((m) => setGloss(m, q.gloss));
+    ipc.vignetteEnabled = level !== 'low';
+    // Efectos de cine (solo en Alta): resplandor de luces, sombras de contacto, bordes suaves y más nitidez
+    if (q.post && !pipeline) {
+      pipeline = new BABYLON.DefaultRenderingPipeline('gfx', true, scene, [camera]);
+      pipeline.samples = 4;
+      pipeline.bloomEnabled = true; pipeline.bloomThreshold = 0.95; pipeline.bloomWeight = 0.22; pipeline.bloomKernel = 40; pipeline.bloomScale = 0.5;
+      pipeline.sharpenEnabled = true; pipeline.sharpen.edgeAmount = 0.18;
+      pipeline.imageProcessingEnabled = true;
+      try {
+        if (BABYLON.SSAO2RenderingPipeline.IsSupported) {
+          ssao = new BABYLON.SSAO2RenderingPipeline('ao', scene, { ssaoRatio: 0.5, blurRatio: 0.5 }, [camera], true);
+          ssao.radius = 1.2; ssao.totalStrength = 1.1; ssao.base = 0.12; ssao.samples = 12; ssao.maxZ = 120; ssao.minZAspect = 0.4; ssao.expensiveBlur = false;
+        }
+      } catch (e) { ssao = null; }
+    } else if (!q.post && pipeline) {
+      if (ssao) {
+        const mgr = scene.postProcessRenderPipelineManager;
+        mgr.detachCamerasFromRenderPipeline('ao', camera); ssao.dispose(); mgr.removePipeline('ao'); ssao = null;
+      }
+      pipeline.dispose(); pipeline = null;
+    }
+  }
+  // Mueve la "caja" de sombras con la cámara, en pasitos fijos para que las sombras no tiemblen
+  function updateShadowFollow() {
+    if (!shadowGen) return;
+    const size = sun.shadowFrustumSize, f = camera.getDirection(V3.Forward());
+    const step = (size / shadowGen.getShadowMap().getSize().width) * 4;
+    const cx = Math.round((camera.position.x + f.x * size * 0.3) / step) * step;
+    const cz = Math.round((camera.position.z + f.z * size * 0.3) / step) * step;
+    const cy = Math.round(camera.position.y / step) * step;
+    sun.position.set(cx - SUN_DIR.x * 200, cy - SUN_DIR.y * 200, cz - SUN_DIR.z * 200);
+  }
+  applyGraphics(gfxLevel);
 
   // ------------------------------------------------------------------
   // Constantes del juego
@@ -95,7 +235,11 @@
     matCache[key] = m;
     return m;
   }
-  const plastic = (hex) => mat(hex, { spec: 0.55, power: 48 });
+  const plastic = (hex) => {
+    const m = mat(hex, { spec: 0.55, power: 64 });
+    if (!m.__gloss) { m.__gloss = true; glossMats.push(m); setGloss(m, GFX[gfxLevel].gloss); }
+    return m;
+  };
 
   let colliders = []; // los del mapa que se está jugando (cada mapa tiene los suyos)
   function addCollider(x0, y0, z0, x1, y1, z1) {
@@ -261,7 +405,7 @@
       for (let i = 0; i < 2600; i++) { c.fillStyle = pick(['#5fb33e', '#7ccd55', '#58a83a', '#86d65f']); c.fillRect(Math.random() * w, Math.random() * h, 2, 5 + Math.random() * 6); }
     });
     grassMat.diffuseTexture.uScale = 40; grassMat.diffuseTexture.vScale = 40;
-    grassMat.specularColor = C3.Black();
+    grassMat.specularColor = C3.Black(); addBump(grassMat, 2.5);
     const ground = BABYLON.MeshBuilder.CreateGround('ground', { width: 1200, height: 1200 }, scene);
     ground.position.y = GROUND_Y; ground.material = grassMat; finishStatic(ground, false);
 
@@ -322,7 +466,7 @@
       }
     });
     wood.diffuseTexture.uScale = 2; wood.diffuseTexture.vScale = 2;
-    wood.specularColor = new C3(0.12, 0.1, 0.08);
+    wood.specularColor = new C3(0.12, 0.1, 0.08); addBump(wood, 3);
     const rulerMat = new BABYLON.StandardMaterial('ruler', scene);
     rulerMat.diffuseTexture = textTexture(512, 64, (c, w, h) => {
       c.fillStyle = '#ffd166'; c.fillRect(0, 0, w, h);
@@ -430,11 +574,10 @@
 
   // Junta las piezas quietas que comparten material en una sola malla: muchas menos llamadas de dibujo (clave en celulares)
   function mergeStatics() {
-    const shadowList = shadowGen ? shadowGen.getShadowMap().renderList : [];
     const groups = new Map();
     for (const m of statics) {
       if (!m.material) continue;
-      const casts = shadowList.includes(m);
+      const casts = casterSet.has(m);
       const key = m.material.uniqueId + (casts ? 's' : 'n');
       if (!groups.has(key)) groups.set(key, { mtl: m.material, casts, list: [] });
       groups.get(key).list.push(m);
@@ -442,7 +585,7 @@
     statics.length = 0;
     for (const { mtl, casts, list } of groups.values()) {
       if (list.length === 1) { statics.push(list[0]); continue; }
-      if (casts) list.forEach((m) => shadowGen.removeShadowCaster(m));
+      if (casts) list.forEach(removeCaster);
       const merged = BABYLON.Mesh.MergeMeshes(list, true, true);
       if (!merged) { statics.push(...list); continue; }
       merged.material = mtl; merged.receiveShadows = true;
@@ -466,7 +609,7 @@
       c.fillStyle = team; c.globalAlpha = 0.55;
       for (let i = 0; i < 8; i++) { c.fillRect(i * 32, 0, 16, h); c.fillRect(0, i * 32, w, 16); }
     });
-    cloth.diffuseTexture.uScale = cloth.diffuseTexture.vScale = 3; cloth.specularColor = C3.Black();
+    cloth.diffuseTexture.uScale = cloth.diffuseTexture.vScale = 3; cloth.specularColor = C3.Black(); addBump(cloth, 1.2);
     box('cloth', H2 * 2 - 1.5, 0.05, H2 * 2 - 1.5, cx, 0, cz, cloth, { collide: false, shadow: false });
     // bandera en el borde de afuera
     const [fx, fz] = L(0, H2 - 1.5);
@@ -644,7 +787,7 @@
       for (let i = 0; i < 2600; i++) { c.fillStyle = pick(['#5fb33e', '#7ccd55', '#58a83a', '#86d65f']); c.fillRect(Math.random() * w, Math.random() * h, 2, 5 + Math.random() * 6); }
     });
     g.diffuseTexture.uScale = g.diffuseTexture.vScale = scale;
-    g.specularColor = C3.Black();
+    g.specularColor = C3.Black(); addBump(g, 2.5);
     return g;
   }
   function woodMaterial(name, base, line, scale) {
@@ -655,7 +798,7 @@
       for (let i = 0; i < 60; i++) { c.strokeStyle = 'rgba(90,50,20,0.12)'; c.lineWidth = 1 + Math.random() * 2; const y = Math.random() * Hh; c.beginPath(); c.moveTo(0, y); for (let x = 0; x <= W; x += 32) c.lineTo(x, y + Math.sin(x / 60 + i) * 3); c.stroke(); }
     });
     w.diffuseTexture.uScale = w.diffuseTexture.vScale = scale;
-    w.specularColor = new C3(0.1, 0.08, 0.06);
+    w.specularColor = new C3(0.1, 0.08, 0.06); addBump(w, 3);
     return w;
   }
   function sphereDeco(d, x, y, z, hex, sy = 1) {
@@ -1122,6 +1265,12 @@
   // Efectos: confeti, polvito, destellos
   // ------------------------------------------------------------------
   const squareTex = textTexture(16, 16, (c) => { c.fillStyle = '#fff'; c.fillRect(0, 0, 16, 16); });
+  const softTex = textTexture(64, 64, (c) => {
+    const g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.45, 'rgba(255,255,255,0.6)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+  });
+  softTex.hasAlpha = true;
   function makePS(cap, c1, c2) {
     const ps = new BABYLON.ParticleSystem('ps', cap, scene);
     ps.particleTexture = squareTex; ps.emitter = new V3(0, -200, 0);
@@ -1141,6 +1290,23 @@
     return ps;
   });
   const puffPS = makePS(400, '#ffffff', '#dddddd');
+  puffPS.particleTexture = softTex;
+  // Humo de las explosiones: nubes redondas que suben y se desvanecen
+  const smokePS = makePS(touchMode ? 120 : 260, '#f4f1ea', '#cfc8bd');
+  smokePS.particleTexture = softTex; smokePS.colorDead = new C4(0.85, 0.83, 0.8, 0);
+  smokePS.minEmitBox = new V3(-1, 0, -1); smokePS.maxEmitBox = new V3(1, 1, 1);
+  smokePS.direction1 = new V3(-1.5, 1.5, -1.5); smokePS.direction2 = new V3(1.5, 3.5, 1.5);
+  smokePS.minEmitPower = 0.6; smokePS.maxEmitPower = 1.6; smokePS.minLifeTime = 0.9; smokePS.maxLifeTime = 1.8;
+  smokePS.minSize = 1.6; smokePS.maxSize = 3.4; smokePS.gravity = new V3(0, 1.2, 0);
+  smokePS.minAngularSpeed = -1; smokePS.maxAngularSpeed = 1;
+  smokePS.addSizeGradient(0, 0.5); smokePS.addSizeGradient(1, 1.6);
+  // Chispas brillantes (con el resplandor de la calidad Alta se ven como luces)
+  const sparkPS = makePS(touchMode ? 150 : 300, '#fff3b0', '#ffb703');
+  sparkPS.particleTexture = softTex; sparkPS.blendMode = BABYLON.ParticleSystem.BLENDMODE_ADD;
+  sparkPS.minEmitBox = V3.Zero(); sparkPS.maxEmitBox = V3.Zero();
+  sparkPS.direction1 = new V3(-6, 4, -6); sparkPS.direction2 = new V3(6, 12, 6);
+  sparkPS.minEmitPower = 0.8; sparkPS.maxEmitPower = 1.6; sparkPS.minLifeTime = 0.3; sparkPS.maxLifeTime = 0.7;
+  sparkPS.minSize = 0.12; sparkPS.maxSize = 0.3; sparkPS.gravity = new V3(0, -14, 0);
   puffPS.minEmitBox = V3.Zero(); puffPS.maxEmitBox = V3.Zero();
   puffPS.direction1 = new V3(-1, 1, -1); puffPS.direction2 = new V3(1, 2.5, 1);
   puffPS.minEmitPower = 0.6; puffPS.maxEmitPower = 1.4; puffPS.minLifeTime = 0.2; puffPS.maxLifeTime = 0.45;
@@ -1157,7 +1323,7 @@
       if (used.has(b.ps)) continue;
       used.add(b.ps);
       b.ps.emitter = b.pos; b.ps.manualEmitCount = b.n;
-      if (b.ps !== puffPS) { b.ps.minEmitPower = 0.5 * b.power; b.ps.maxEmitPower = 1.1 * b.power; }
+      if (confettiPS.includes(b.ps)) { b.ps.minEmitPower = 0.5 * b.power; b.ps.maxEmitPower = 1.1 * b.power; }
       burstQueue.splice(i, 1); i--;
     }
   }
@@ -1545,6 +1711,7 @@
   function explode(g) {
     const R = g.mega ? MEGA_R : 6.5;
     confetti(g.pos, g.mega ? 5 : 2.5); flashSphere(g.pos, R * 0.9, g.mega ? '#ff4d6d' : '#ffd23f');
+    burstQueue.push({ ps: smokePS, pos: g.pos.clone(), n: g.mega ? 40 : 18, power: 1 }, { ps: sparkPS, pos: g.pos.clone(), n: g.mega ? 60 : 30, power: 1 });
     if (g.mega) { flashSphere(g.pos.add(new V3(0, 1.5, 0)), R * 0.6, '#ffd23f'); sfx('boom', 1); }
     sfx('boom', clamp(1 - V3.Distance(g.pos, camera.position) / 90, 0.1, 1));
     for (const s of soldiers) {
@@ -2890,6 +3057,7 @@
     $('sensVal').textContent = cfg.sens.toFixed(1);
     $('sensRange').value = cfg.sens;
     [...$('camChoices').children].forEach((b) => b.classList.toggle('sel', b.dataset.cam === cfg.cam));
+    [...$('gfxChoices').children].forEach((b) => b.classList.toggle('sel', b.dataset.gfx === gfxLevel));
     [...$('fireChoices').children].forEach((b) => b.classList.toggle('sel', b.dataset.fire === cfg.fire));
     document.body.classList.toggle('fire-manual', cfg.fire === 'manual');
     if (cfg.fire !== 'manual') { touchFire = false; $('bFire').classList.remove('on'); }
@@ -2900,6 +3068,7 @@
   $('sensPlus').addEventListener('click', () => setSens(cfg.sens + 0.1));
   $('sensRange').addEventListener('input', (e) => setSens(+e.target.value));
   choose($('camChoices'), 'cam', (v) => { cfg.cam = v; applySettings(); saveCfg(); });
+  choose($('gfxChoices'), 'gfx', (v) => { cfg.gfx = v; applyGraphics(v); applySettings(); saveCfg(); });
   choose($('fireChoices'), 'fire', (v) => { cfg.fire = v; applySettings(); saveCfg(); });
   function openSettings() {
     settingsFromPlay = state === 'playing';
@@ -3002,6 +3171,7 @@
     if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) hud.banner.classList.remove('show'); }
     updateCamera(dt);
     drawMinimap(dt);
+    updateShadowFollow();
     scene.render();
     if (++framesDrawn === 3 && window.__paReady) window.__paReady(); // avisa a la pantalla de carga
   });
